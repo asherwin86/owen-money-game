@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://asherwin86.github.io/owen-money-game/sitemap.xml
+Sitemap: https://money-tycoon-3d.onrender.com/sitemap.xml
