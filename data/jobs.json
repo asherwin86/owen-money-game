@@ -1,0 +1,7 @@
+[
+  {"id": "data_entry", "name": "Data Entry",      "office_name": "Filing Desk",  "desc": "Type the words as fast as you can.",        "minigame": "typing",   "base_pay": 45, "color": [80, 160, 255]},
+  {"id": "sorting",    "name": "Package Sorting", "office_name": "Mailroom",     "desc": "Sort packages into the matching bins.",     "minigame": "sort",     "base_pay": 40, "color": [255, 170, 60]},
+  {"id": "courier",    "name": "Courier Dash",    "office_name": "Dispatch",     "desc": "Hit the key the instant the light is green.", "minigame": "reaction", "base_pay": 50, "color": [90, 220, 120]},
+  {"id": "security",   "name": "Security Console","office_name": "Security",     "desc": "Repeat the alarm pattern from memory.",     "minigame": "memory",   "base_pay": 55, "color": [220, 90, 90]},
+  {"id": "accounting", "name": "Quick Accounting","office_name": "Accounts",     "desc": "Solve sums quickly and press Enter.",       "minigame": "math",     "base_pay": 60, "color": [190, 120, 255]}
+]
