@@ -1,0 +1,39 @@
+# Render Blueprint for the Money Tycoon 3D download website.
+# The site is plain HTML in docs/, so there is nothing to build: Render just
+# publishes that folder on its global CDN with free TLS.
+services:
+  - type: web
+    name: money-tycoon-3d
+    runtime: static
+    buildCommand: echo "Static site, nothing to build"
+    staticPublishPath: ./docs
+    autoDeployTrigger: commit
+    # Only redeploy when the website itself changes (not when the game code does).
+    buildFilter:
+      paths:
+        - docs/**
+        - render.yaml
+
+    # Add your own domain here once you have chosen it, then add the DNS record
+    # Render shows you at your registrar. A root domain also gets www automatically.
+    # domains:
+    #   - game.example.com
+
+    headers:
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
+      - path: /*
+        name: X-Frame-Options
+        value: sameorigin
+      # Screenshots rarely change: let browsers keep them for a week.
+      - path: /img/*
+        name: Cache-Control
+        value: public, max-age=604800
+      # The page itself should pick up changes quickly.
+      - path: /index.html
+        name: Cache-Control
+        value: public, max-age=0, must-revalidate
