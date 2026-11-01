@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Money Tycoon 3D - Free 3D Money and Business Tycoon Game for Windows</title>
+<meta name="description" content="Money Tycoon 3D is a free 3D tycoon game for Windows. Earn cash with mini-game jobs, climb from Intern to CEO, sell the company, then build and take public a business of your own. No install needed.">
+<link rel="canonical" href="https://asherwin86.github.io/owen-money-game/">
+<meta name="theme-color" content="#0b1020">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230b1020'/%3E%3Ctext x='32' y='46' font-size='40' font-family='Arial' font-weight='700' text-anchor='middle' fill='%23ffd23f'%3E$%3C/text%3E%3C/svg%3E">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Money Tycoon 3D">
+<meta property="og:title" content="Money Tycoon 3D - Free 3D Money and Business Tycoon Game">
+<meta property="og:description" content="Work mini-game jobs, climb nine ranks to CEO, sell the company, then build your own empire. Free download for Windows.">
+<meta property="og:url" content="https://asherwin86.github.io/owen-money-game/">
+<meta property="og:image" content="https://asherwin86.github.io/owen-money-game/img/og.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Money Tycoon 3D - Free 3D Money and Business Tycoon Game">
+<meta name="twitter:description" content="Work mini-game jobs, climb nine ranks to CEO, sell the company, then build your own empire. Free download for Windows.">
+<meta name="twitter:image" content="https://asherwin86.github.io/owen-money-game/img/og.jpg">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "VideoGame",
+  "name": "Money Tycoon 3D",
+  "url": "https://asherwin86.github.io/owen-money-game/",
+  "description": "A free 3D tycoon game for Windows. Earn cash with mini-game jobs, climb from Intern to CEO, sell the company, then build and take public a business of your own.",
+  "image": "https://asherwin86.github.io/owen-money-game/img/og.jpg",
+  "genre": ["Simulation", "Tycoon", "Idle"],
+  "gamePlatform": "PC",
+  "operatingSystem": "Windows 10, Windows 11",
+  "applicationCategory": "Game",
+  "playMode": "SinglePlayer",
+  "inLanguage": "en",
+  "license": "https://opensource.org/license/mit",
+  "author": { "@type": "Person", "name": "Owen" },
+  "downloadUrl": "https://github.com/asherwin86/owen-money-game/releases/latest/download/MoneyTycoon3D.exe",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD", "availability": "https://schema.org/InStock" }
+}
+</script>
+
+<style>
+:root {
+  --bg: #0b1020; --panel: #121a30; --panel-2: #172041; --line: #263259;
+  --text: #e8ecf8; --muted: #9aa6c7; --gold: #ffd23f; --gold-2: #ffb703; --green: #5be37d;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 17px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+a { color: var(--gold); }
+img { max-width: 100%; height: auto; display: block; }
+.wrap { width: min(1080px, 100% - 32px); margin-inline: auto; }
+
+header.top { position: sticky; top: 0; z-index: 10; background: rgba(11,16,32,.9); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+header.top .wrap { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 0; }
+.brand { font-weight: 800; letter-spacing: .2px; color: var(--text); text-decoration: none; }
+.brand span { color: var(--gold); }
+nav a { color: var(--muted); text-decoration: none; margin-left: 18px; font-size: 15px; }
+nav a:hover { color: var(--text); }
+@media (max-width: 640px) { nav a:not(.nav-dl) { display: none; } }
+
+.btn {
+  display: inline-flex; align-items: center; gap: 10px; padding: 14px 26px; border-radius: 12px;
+  font-weight: 800; font-size: 18px; text-decoration: none; color: #1b1500;
+  background: linear-gradient(180deg, var(--gold), var(--gold-2)); box-shadow: 0 6px 24px rgba(255,183,3,.28);
+  transition: transform .12s ease, box-shadow .12s ease;
+}
+.btn:hover { transform: translateY(-2px); box-shadow: 0 10px 30px rgba(255,183,3,.4); }
+.btn:focus-visible, a:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+.btn.small { padding: 8px 16px; font-size: 15px; box-shadow: none; }
+.btn.ghost { background: transparent; color: var(--text); border: 1px solid var(--line); box-shadow: none; }
+.btn.ghost:hover { border-color: var(--gold); }
+
+.hero { padding: 64px 0 40px; background: radial-gradient(900px 400px at 75% -10%, rgba(255,210,63,.16), transparent 60%); }
+.hero .wrap { display: grid; grid-template-columns: 1fr 1.15fr; gap: 40px; align-items: center; }
+@media (max-width: 860px) { .hero .wrap { grid-template-columns: 1fr; } }
+h1 { font-size: clamp(34px, 5.4vw, 56px); line-height: 1.08; margin: 0 0 16px; letter-spacing: -.5px; }
+h1 em { font-style: normal; color: var(--gold); }
+.lead { color: var(--muted); font-size: 19px; margin: 0 0 26px; }
+.cta { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.meta { margin-top: 14px; color: var(--muted); font-size: 14px; }
+.meta b { color: var(--text); }
+.shot { border-radius: 14px; border: 1px solid var(--line); box-shadow: 0 20px 60px rgba(0,0,0,.5); overflow: hidden; background: var(--panel); }
+
+section { padding: 56px 0; }
+section h2 { font-size: clamp(26px, 3.6vw, 36px); margin: 0 0 8px; letter-spacing: -.3px; }
+.sub { color: var(--muted); margin: 0 0 28px; max-width: 62ch; }
+
+.steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; counter-reset: s; padding: 0; list-style: none; margin: 0; }
+.steps li { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 20px; position: relative; counter-increment: s; }
+.steps li::before { content: counter(s); display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: var(--gold); color: #1b1500; font-weight: 800; margin-bottom: 12px; }
+.steps h3 { margin: 0 0 6px; font-size: 19px; }
+.steps p { margin: 0; color: var(--muted); font-size: 15.5px; }
+
+.features { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 20px; }
+.card h3 { margin: 0 0 6px; font-size: 18px; color: var(--gold); }
+.card p { margin: 0; color: var(--muted); font-size: 15.5px; }
+
+.gallery { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px; }
+figure { margin: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+figcaption { padding: 12px 16px; color: var(--muted); font-size: 15px; }
+figcaption b { color: var(--text); }
+
+.ranks { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 0; padding: 0; list-style: none; }
+.ranks li { background: var(--panel-2); border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px; font-size: 14px; }
+.ranks li:last-child { background: var(--gold); color: #1b1500; font-weight: 800; border-color: var(--gold); }
+
+.controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+kbd { background: var(--panel-2); border: 1px solid var(--line); border-bottom-width: 3px; border-radius: 8px; padding: 2px 9px; font: 700 15px ui-monospace, Consolas, monospace; color: var(--text); }
+.controls div { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; color: var(--muted); font-size: 15.5px; }
+
+details { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; margin-bottom: 10px; }
+summary { cursor: pointer; padding: 16px 18px; font-weight: 700; list-style-position: inside; }
+details p { margin: 0; padding: 0 18px 16px; color: var(--muted); }
+
+.final { text-align: center; background: linear-gradient(180deg, transparent, rgba(255,210,63,.08)); border-top: 1px solid var(--line); }
+footer { padding: 28px 0 40px; color: var(--muted); font-size: 14px; text-align: center; border-top: 1px solid var(--line); }
+footer a { color: var(--muted); }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="#top">Money <span>Tycoon</span> 3D</a>
+    <nav aria-label="Main">
+      <a href="#how">How it works</a>
+      <a href="#screens">Screenshots</a>
+      <a href="#faq">FAQ</a>
+      <a class="btn small nav-dl" href="https://github.com/asherwin86/owen-money-game/releases/latest/download/MoneyTycoon3D.exe">Download</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+  <div class="hero">
+    <div class="wrap">
+      <div>
+        <h1>Start as an intern.<br>End up <em>owning the company.</em></h1>
+        <p class="lead">Money Tycoon 3D is a free 3D tycoon game for Windows. Work mini-game jobs, climb nine ranks to CEO, sell the company, then build and take public a business of your own.</p>
+        <div class="cta">
+          <a class="btn" href="https://github.com/asherwin86/owen-money-game/releases/latest/download/MoneyTycoon3D.exe">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0l-5-5m5 5l5-5M4 20h16"/></svg>
+            Download for Windows
+          </a>
+          <a class="btn ghost" href="https://github.com/asherwin86/owen-money-game">Source code</a>
+        </div>
+        <p class="meta"><b>Free</b> &middot; Windows 10 / 11 &middot; v1.0.0 &middot; 58 MB &middot; No install, just double-click</p>
+      </div>
+      <div class="shot">
+        <img src="img/plaza.jpg" width="1280" height="720" alt="The Gig Plaza in Money Tycoon 3D: colorful job kiosks in front of the Apex Corp tower">
+      </div>
+    </div>
+  </div>
+
+  <section id="how">
+    <div class="wrap">
+      <h2>From odd jobs to empire</h2>
+      <p class="sub">There is always something to do, and every step makes the next one pay more.</p>
+      <ol class="steps">
+        <li><h3>Take gigs any time</h3><p>Five mini-game jobs are open in the Gig Plaza from the start: typing, sorting, reaction, memory and quick maths.</p></li>
+        <li><h3>Get hired at Apex Corp</h3><p>Walk into the tower and work the desks for much bigger pay, plus a paycheck every 15 seconds.</p></li>
+        <li><h3>Climb to CEO</h3><p>Earn XP at work and get promoted. Every rank multiplies what you earn.</p></li>
+        <li><h3>Sell the company</h3><p>As CEO, take the board's offer and cash out. That unlocks the vacant lot downtown.</p></li>
+        <li><h3>Build your own</h3><p>Found your company, hire staff, expand your offices, and take it public for a permanent bonus.</p></li>
+      </ol>
+      <ul class="ranks" aria-label="Career ranks">
+        <li>Intern</li><li>Junior Associate</li><li>Associate</li><li>Senior Associate</li><li>Team Lead</li><li>Manager</li><li>Director</li><li>Vice President</li><li>CEO</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="features" style="padding-top:0">
+    <div class="wrap">
+      <h2>A big game with lots to do</h2>
+      <p class="sub">Walk around a 3D city in first person and decide where to put your money next.</p>
+      <div class="features">
+        <div class="card"><h3>5 mini-games</h3><p>Quick, skill-based jobs that pay by how well you play, so you get better at them as you go.</p></div>
+        <div class="card"><h3>9 career ranks</h3><p>A full corporate ladder from Intern to CEO, with a pay multiplier and salary at every step.</p></div>
+        <div class="card"><h3>Your own company</h3><p>Hire five kinds of staff, buy upgrades, and expand through five office tiers to earn while you play.</p></div>
+        <div class="card"><h3>Go public</h3><p>Take your company public for a huge payout and a permanent bonus, then start again even stronger.</p></div>
+        <div class="card"><h3>Shop and bank</h3><p>Buy tools, shoes, coffee and a power suit, and park savings in the bank to earn interest.</p></div>
+        <div class="card"><h3>Saves itself</h3><p>Progress is saved automatically, so you can quit any time from the pause menu.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="screens" style="padding-top:0">
+    <div class="wrap">
+      <h2>Screenshots</h2>
+      <p class="sub">Real in-game footage from version 1.0.0.</p>
+      <div class="gallery">
+        <figure><img loading="lazy" src="img/sort.jpg" width="1280" height="720" alt="Package Sorting mini-game with red, green and blue bins"><figcaption><b>Mini-game jobs</b> you can do at any time</figcaption></figure>
+        <figure><img loading="lazy" src="img/hr.jpg" width="1280" height="720" alt="The Human Resources promotion screen showing rank and XP"><figcaption><b>Get promoted</b> and multiply your pay</figcaption></figure>
+        <figure><img loading="lazy" src="img/lot.jpg" width="1280" height="720" alt="A company headquarters building on the downtown lot"><figcaption><b>Your own building</b> grows as you expand</figcaption></figure>
+        <figure><img loading="lazy" src="img/own.jpg" width="1280" height="720" alt="Inside the player's own company office with staff at desks"><figcaption><b>Hire staff</b> and watch the office fill up</figcaption></figure>
+        <figure><img loading="lazy" src="img/manage.jpg" width="1280" height="720" alt="The company management screen with hiring and upgrade options"><figcaption><b>Manage and upgrade</b> your growing empire</figcaption></figure>
+        <figure><img loading="lazy" src="img/memory.jpg" width="1280" height="720" alt="Security Console memory mini-game with four colored pads"><figcaption><b>Memory pattern</b> security console</figcaption></figure>
+        <figure><img loading="lazy" src="img/shop.jpg" width="1280" height="720" alt="The in-game shop with permanent upgrades"><figcaption><b>The shop</b> sells permanent boosts</figcaption></figure>
+      </div>
+    </div>
+  </section>
+
+  <section id="controls" style="padding-top:0">
+    <div class="wrap">
+      <h2>Controls</h2>
+      <p class="sub">Keyboard and mouse. Nothing to configure.</p>
+      <div class="controls">
+        <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><br>Move around</div>
+        <div><kbd>Space</kbd><br>Jump</div>
+        <div><kbd>E</kbd><br>Interact when you see the yellow marker</div>
+        <div><kbd>Esc</kbd><br>Pause menu, save and quit</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="faq" style="padding-top:0">
+    <div class="wrap">
+      <h2>Questions</h2>
+      <details><summary>Is Money Tycoon 3D really free?</summary><p>Yes. It is free to download and play, with no ads or purchases. The source code is open under the MIT license.</p></details>
+      <details><summary>Does it need to be installed?</summary><p>No. Download <code>MoneyTycoon3D.exe</code> and double-click it. It runs on Windows 10 and 11 and does not need Python or anything else.</p></details>
+      <details><summary>Why does Windows say "Windows protected your PC"?</summary><p>The game is a small independent project and the exe is not signed with a paid publisher certificate, so Windows SmartScreen shows a warning for new downloads. Click <b>More info</b>, then <b>Run anyway</b>. You can read the full source code on GitHub or build the exe yourself.</p></details>
+      <details><summary>Where is my save file?</summary><p>The game saves automatically to <code>save.json</code> in the same folder as the exe. Keep the exe in its own folder so your progress stays with it.</p></details>
+      <details><summary>Can I change the jobs or pay?</summary><p>Yes. Put a <code>data/jobs.json</code> file next to the exe to override the built-in jobs. The format is in the source code on GitHub.</p></details>
+      <details><summary>What about Mac or Linux?</summary><p>The download is for Windows. The game is written in Python with the Ursina engine, so you can run it from source on other systems by following the steps in the README.</p></details>
+    </div>
+  </section>
+
+  <section class="final">
+    <div class="wrap">
+      <h2>Ready to get rich?</h2>
+      <p class="sub" style="margin-inline:auto">Your first gig is a few seconds away.</p>
+      <a class="btn" href="https://github.com/asherwin86/owen-money-game/releases/latest/download/MoneyTycoon3D.exe">Download for Windows</a>
+      <p class="meta">Free &middot; v1.0.0 &middot; 58 MB</p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    Money Tycoon 3D &middot; MIT licensed &middot;
+    <a href="https://github.com/asherwin86/owen-money-game">Source on GitHub</a> &middot;
+    <a href="https://github.com/asherwin86/owen-money-game/releases">All releases</a> &middot;
+    <a href="https://github.com/asherwin86/owen-money-game/issues">Report a bug</a>
+  </div>
+</footer>
+
+</body>
+</html>

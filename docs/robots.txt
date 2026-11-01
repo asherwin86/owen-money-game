@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://asherwin86.github.io/owen-money-game/sitemap.xml
