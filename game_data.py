@@ -1,11 +1,15 @@
 """Static game data, formulas and save/load for Money Tycoon 3D."""
-import copy
 import json
 import os
+import sys
 
-BASE = os.path.dirname(os.path.abspath(__file__))
-SAVE_PATH = os.path.join(BASE, 'save.json')
+FROZEN = getattr(sys, 'frozen', False)
+# Bundled read-only data (inside the exe when frozen) vs. writable files next to the game.
+BASE = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
+USER_DIR = os.path.dirname(sys.executable) if FROZEN else BASE
+SAVE_PATH = os.path.join(USER_DIR, 'save.json')
 JOBS_PATH = os.path.join(BASE, 'data', 'jobs.json')
+OVERRIDE_JOBS_PATH = os.path.join(USER_DIR, 'data', 'jobs.json')
 
 DEFAULT_JOBS = [
     {"id": "data_entry", "name": "Data Entry", "office_name": "Filing Desk", "desc": "Type the words.",
@@ -14,11 +18,14 @@ DEFAULT_JOBS = [
 
 
 def load_jobs():
-    try:
-        with open(JOBS_PATH, encoding='utf-8') as f:
-            return json.load(f)
-    except (OSError, ValueError):
-        return DEFAULT_JOBS
+    # a data/jobs.json next to the exe overrides the bundled one, so jobs stay moddable
+    for path in (OVERRIDE_JOBS_PATH, JOBS_PATH):
+        try:
+            with open(path, encoding='utf-8') as f:
+                return json.load(f)
+        except (OSError, ValueError):
+            continue
+    return DEFAULT_JOBS
 
 
 # ---- corporate career -------------------------------------------------------
