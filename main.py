@@ -10,11 +10,20 @@ import random
 from ursina import *
 from ursina.prefabs.first_person_controller import FirstPersonController
 
+import delivery as dv
 import game_data as gd
 import minigames as mg
+import updater
+import version
 
 S = gd.load_state()
 JOBS = gd.load_jobs()
+upd = updater.Updater(version.VERSION)
+upd.cleanup()                       # remove leftovers of a previous update
+if S['updates']['auto']:
+    upd.check_async()
+MINI_JOBS = [j for j in JOBS if j.get('kind') != 'delivery']      # jobs done as mini-games
+drive = None                                                      # the food delivery session, created below
 
 app = Ursina(title='Money Tycoon 3D', borderless=False, vsync=True)
 window.exit_button.visible = False
@@ -27,9 +36,9 @@ Sky()
 
 OFFICE_X = 1000
 OWN_X = 2000
-SCENES = ['town', 'office', 'own']
+SCENES = ['town', 'office', 'own', 'city']
 roots = {name: Entity() for name in SCENES}
-for _name in ('office', 'own'):
+for _name in ('office', 'own', 'city'):
     roots[_name].enabled = False
 current = 'town'
 
@@ -81,6 +90,7 @@ help_text = Text('WASD move   SPACE jump   E interact   ESC menu / quit', parent
                  color=color.light_gray)
 prompt = Text('', parent=camera.ui, y=-.32, origin=(0, 0), scale=1.7, color=color.yellow)
 toast_text = Text('', parent=camera.ui, position=window.bottom_left + Vec2(.02, .3), origin=(-.5, -.5), scale=1.1)
+update_text = Text('', parent=camera.ui, position=(0, .46), origin=(0, 0), scale=1.2, color=color.gold)
 toasts = []
 
 
@@ -144,6 +154,8 @@ def open_panel(title, build, **kw):
     if panel or mini:
         return
     player.enabled = False
+    if drive is not None and drive.active:
+        mouse.visible = True
     panel = Panel(title, build, **kw)
 
 
@@ -153,7 +165,10 @@ def close_panel():
         panel.dead = True
         destroy(panel)
         panel = None
-        player.enabled = True
+        if drive is not None and drive.active:
+            mouse.visible = False
+        else:
+            player.enabled = True
 
 
 def start_mini(job, mode):
@@ -240,6 +255,8 @@ def shop_rows():
                     S['money'] -= cost
                     S['shop'][key] += 1
                     player.speed = gd.walk_speed(S)
+                    if drive is not None:
+                        drive.apply_upgrades()
                     notify(f'Bought {gd.SHOP[key]["name"]}!')
 
             rows.append(('item', text, gd.fmt(cost), S['money'] >= cost, buy))
@@ -272,12 +289,112 @@ def pause_rows():
         gd.save_state(S)
         application.quit()
 
-    return [
-        ('info', 'Your progress is saved automatically.', color.light_gray),
+    def stop_shift():
+        close_panel()
+        if drive.orders:
+            S['delivery']['rating'] = round(max(1.0, S['delivery']['rating'] - .3 * len(drive.orders)), 3)
+            drive.orders = []
+        leave_city()
+
+    def check_now():
+        close_panel()
+        if upd.state not in ('checking', 'downloading'):
+            upd.check_async(manual=True)
+            notify('Checking for updates...')
+
+    def toggle_auto():
+        S['updates']['auto'] = not S['updates']['auto']
+
+    rows = [
+        ('info', f'Money Tycoon 3D v{version.VERSION}. Your progress is saved automatically.', color.light_gray),
         ('gap',),
         ('btn', 'Resume', True, close_panel),
-        ('btn', 'Save and quit', True, quit_game),
     ]
+    if drive is not None and drive.active:
+        rows.append(('btn', 'End shift and return to town', True, stop_shift))
+    rows.append(('btn', 'Check for updates', True, check_now))
+    rows.append(('btn', f'Automatic update checks: {"ON" if S["updates"]["auto"] else "OFF"}', True, toggle_auto))
+    rows.append(('btn', 'Save and quit', True, quit_game))
+    return rows
+
+
+# ---------------------------------------------------------------- updates
+def update_rows():
+    info = upd.info
+    if upd.state == 'ready':
+        return [
+            ('info', f'Version {info["version"]} is downloaded and checked.', color.lime),
+            ('info', 'Restart to finish updating. Your progress is saved first.', color.light_gray),
+            ('gap',),
+            ('btn', 'Restart and finish updating', True, restart_for_update),
+            ('btn', 'Later', True, close_panel),
+        ]
+
+    def start_download():
+        close_panel()
+        upd.download_async()
+        notify('Downloading the update...')
+
+    def skip():
+        S['updates']['skip'] = info['version']
+        close_panel()
+
+    rows = [('info', f'Version {info["version"]} is available (you have {version.VERSION}).', color.lime)]
+    for line in [ln.strip() for ln in info.get('notes', '').splitlines() if ln.strip()][:5]:
+        rows.append(('info', line[:100], color.light_gray))
+    rows.append(('gap',))
+    if upd.can_self_update:
+        rows.append(('btn', 'Update now', True, start_download))
+    else:
+        rows.append(('btn', 'Open the download page', True, upd.open_download_page))
+    rows.append(('btn', 'Remind me later', True, close_panel))
+    rows.append(('btn', f'Skip version {info["version"]}', True, skip))
+    return rows
+
+
+def restart_for_update():
+    gd.save_state(S)
+    try:
+        upd.install(launch=True)
+    except Exception as e:
+        close_panel()
+        notify(f'Update failed: {e}')
+        return
+    application.quit()
+
+
+# ---------------------------------------------------------------- food delivery
+def start_delivery():
+    if panel or mini or drive is None:
+        return
+
+    def go():
+        drive.build()
+        goto('city', (0, 2, 0))
+        player.enabled = False
+        mouse.visible = False
+        drive.enter()
+
+    if drive.built:
+        go()
+        return
+    player.enabled = False
+    cover = Entity(parent=camera.ui, model='quad', color=rgb(10, 14, 26), scale=(3.2, 1.2), z=-5)
+    note = Text('Building the city...', parent=camera.ui, origin=(0, 0), scale=3, color=color.gold, z=-6)
+
+    def build_then_go():
+        go()
+        destroy(cover)
+        destroy(note)
+
+    invoke(build_then_go, delay=.25)          # let the loading screen draw first
+
+
+def leave_city():
+    drive.leave()
+    goto('town', (30, 2, -3), 0)
+    player.enabled = True
+    mouse.visible = True
 
 
 # ---------------------------------------------------------------- panels: career
@@ -454,6 +571,10 @@ def build_town():
         label(r, job['name'], x, 5.6, 6, scale=18)
         label(r, f'${job["base_pay"]}+ per run', x, 4.8, 6, scale=12, col=color.light_gray)
 
+        if job.get('kind') == 'delivery':
+            station('town', x, 2, f'[E] Start a shift: {job["name"]}  -  {job["desc"]}', start_delivery)
+            continue
+
         def act(job=job):
             start_mini(job, 'gig')
         station('town', x, 2, f'[E] Work gig: {job["name"]}  -  {job["desc"]}', act)
@@ -571,8 +692,8 @@ def desk(r, x, z, col, text, w=5):
 
 def build_office():
     r = build_interior('office', OFFICE_X, 50, 44, rgb(90, 100, 120), rgb(215, 220, 230))
-    for i, job in enumerate(JOBS):
-        x = OFFICE_X + (i - (len(JOBS) - 1) / 2) * 9
+    for i, job in enumerate(MINI_JOBS):
+        x = OFFICE_X + (i - (len(MINI_JOBS) - 1) / 2) * 9
         desk(r, x, 17, rgb(*job['color']), job['office_name'])
 
         def act(job=job):
@@ -623,8 +744,8 @@ def refresh_staff():
 def build_own():
     r = build_interior('own', OWN_X, 70, 50, rgb(70, 90, 80), rgb(235, 225, 200))
     staff_root.parent = r
-    for i, job in enumerate(JOBS):
-        x = OWN_X + (i - (len(JOBS) - 1) / 2) * 11
+    for i, job in enumerate(MINI_JOBS):
+        x = OWN_X + (i - (len(MINI_JOBS) - 1) / 2) * 11
         desk(r, x, 21, rgb(*job['color']), job['office_name'], w=6)
 
         def act(job=job):
@@ -654,6 +775,7 @@ station('town', 0, -54, lambda: '[E] Enter your company' if S['own'] else '[E] C
 
 player = FirstPersonController(position=(0, 2, -10), speed=gd.walk_speed(S), jump_height=1.6)
 player.cursor.scale = .004
+drive = dv.DriveSession(app, S, roots['city'], notify, earn, open_panel, close_panel, leave_city)
 
 
 # ---------------------------------------------------------------- main loop
@@ -663,6 +785,7 @@ class Game(Entity):
         self.t_hud = self.t_save = self.t_bank = self.t_pay = 0.0
         self.clock = 0.0
         self.frac_paid = 0.0
+        self.upd_seen = None
 
     def nearest(self):
         best, bd = None, 1e9
@@ -704,6 +827,24 @@ class Game(Entity):
         if self.t_save >= 20:
             self.t_save = 0
             gd.save_state(S)
+        if drive.active and not (panel or mini):
+            drive.update(dt)
+        # updates
+        update_text.text = f'Downloading update... {int(upd.progress * 100)}%' if upd.state == 'downloading' else ''
+        if upd.state != self.upd_seen and not (panel or mini or drive.active):
+            self.upd_seen = upd.state
+            if upd.state == 'available':
+                upd.prompted = True
+                if upd.manual or upd.info['version'] != S['updates']['skip']:
+                    open_panel('Update Available', update_rows)
+            elif upd.state == 'ready':
+                open_panel('Update Ready', update_rows)
+            elif upd.state == 'none' and upd.manual:
+                notify(f"You're up to date (v{version.VERSION}).")
+            elif upd.state == 'error' and upd.manual:
+                notify(f'Could not check for updates: {upd.error}')
+            elif upd.state == 'failed':
+                notify(f'Update failed: {upd.error}')
         # toasts
         for t in toasts:
             t[1] -= dt
@@ -713,8 +854,9 @@ class Game(Entity):
         st = self.nearest() if not (panel or mini) else None
         prompt.text = st.title() if st else ''
         overlay = bool(panel or mini)
-        for w in (hud, help_text, toast_text, prompt):
+        for w in (hud, toast_text, prompt, update_text):
             w.enabled = not overlay
+        help_text.enabled = not overlay and not drive.active
         # hud
         self.t_hud -= dt
         if self.t_hud <= 0:
@@ -732,6 +874,8 @@ class Game(Entity):
         if S['own']:
             lines.append(f'<gold>{S["own"]["name"]}<default>  +{gd.fmt(gd.passive_income(S))}/s'
                          + (f'   prestige {S["prestige"]}' if S['prestige'] else ''))
+        if S['delivery']['deliveries'] and current != 'city':
+            lines.append(f'Delivery rating {S["delivery"]["rating"]:.1f}/5   {S["delivery"]["deliveries"]} deliveries')
         hud.text = '\n'.join(lines)
 
     def input(self, key):
@@ -743,6 +887,8 @@ class Game(Entity):
             return
         if key == 'escape':
             open_panel('Paused', pause_rows, width=.9)
+        elif drive.active:
+            drive.on_key(key)
         elif key == 'e':
             st = self.nearest()
             if st:

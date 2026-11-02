@@ -49,6 +49,8 @@ SHOP = {
     'shoes':  dict(name='Running Shoes',   desc='Walk faster around the city', base=150, growth=1.8, max=5),
     'coffee': dict(name='Coffee Machine',  desc='+3s on every mini-game',      base=250, growth=1.9, max=5),
     'suit':   dict(name='Power Suit',      desc='+10% rank XP',                base=400, growth=1.8, max=10),
+    'car':    dict(name='Better Delivery Car', desc='Faster, quicker to accelerate (food delivery)', base=800, growth=2.0, max=6),
+    'bag':    dict(name='Insulated Food Bag',  desc='Food stays hot; carry more orders (food delivery)', base=400, growth=1.9, max=4),
 }
 
 
@@ -99,6 +101,8 @@ def new_state():
         money=50.0, bank=0.0, xp=0, rank=0, employed=False, company_earned=0.0,
         total_earned=0.0, jobs_done=0, founder=False, prestige=0, own=None,
         shop={k: 0 for k in SHOP},
+        delivery=dict(deliveries=0, rating=5.0, earned=0.0, late=0, best=0.0),
+        updates=dict(auto=True, skip=''),
     )
 
 
@@ -142,6 +146,23 @@ def prestige_mult(S):
 
 def walk_speed(S):
     return 7 + 1.2 * S['shop']['shoes']
+
+
+def car_level(S):
+    return S['shop'].get('car', 0)
+
+
+def bag_level(S):
+    return S['shop'].get('bag', 0)
+
+
+def order_capacity(S):
+    return 1 + bag_level(S) // 2
+
+
+def delivery_pay_mult(S):
+    """Better ratings pay a little more (rating 5 = +10%, rating 1 = -10%)."""
+    return 0.9 + 0.05 * (S['delivery']['rating'] - 1)
 
 
 def time_bonus(S):
