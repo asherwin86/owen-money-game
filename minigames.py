@@ -4,6 +4,8 @@ import time as pytime
 
 from ursina import *
 
+import controls as pad
+
 DIGITS = '0123456789'
 
 
@@ -16,11 +18,72 @@ def digit_of(key):
     return None
 
 
+class PadKeys(Entity):
+    """On-screen keys you move over with the D-pad / left stick and press with A."""
+
+    def __init__(self, parent, rows, x=0.0, y=-.2, size=.08):
+        super().__init__(parent=parent, x=x, y=y)
+        self.rows = rows
+        self.r = self.c = 0
+        self.hint = None
+        self.cells = []
+        gap = size * 1.08
+        for ri, row in enumerate(rows):
+            line = []
+            for ci, tok in enumerate(row):
+                cx, cy = (ci - (len(row) - 1) / 2) * gap, -ri * gap
+                bg = Entity(parent=self, model='quad', position=(cx, cy), scale=(size, size))
+                label = Text(tok, parent=self, position=(cx, cy), origin=(0, 0), z=-.01,
+                             scale=1.0 if len(tok) == 1 else .75)
+                line.append((bg, label, tok))
+            self.cells.append(line)
+        self.paint()
+
+    def token(self):
+        return self.rows[self.r][self.c]
+
+    def move(self, d):
+        dr = {'up': -1, 'down': 1}.get(d, 0)
+        dc = {'left': -1, 'right': 1}.get(d, 0)
+        self.r = (self.r + dr) % len(self.rows)
+        self.c = min(self.c, len(self.rows[self.r]) - 1)
+        self.c = (self.c + dc) % len(self.rows[self.r])
+        self.paint()
+
+    def goto(self, tok):
+        for ri, row in enumerate(self.rows):
+            if tok in row:
+                self.r, self.c = ri, row.index(tok)
+        self.paint()
+
+    def mark(self, tok):
+        self.hint = tok
+        self.paint()
+
+    def paint(self):
+        for ri, line in enumerate(self.cells):
+            for ci, (bg, label, tok) in enumerate(line):
+                if (ri, ci) == (self.r, self.c):
+                    bg.color = color.gold
+                    label.color = color.black
+                elif tok == self.hint:
+                    bg.color = color.rgba32(40, 120, 70, 255)
+                    label.color = color.white
+                else:
+                    bg.color = color.rgba32(40, 48, 70, 255)
+                    label.color = color.white
+
+
+RESULT_BUTTONS = ('gamepad a', 'gamepad b', 'gamepad x', 'gamepad y', 'gamepad start')
+
+
 class Mini(Entity):
     title = 'Mini-game'
     instructions = ''
     duration = 30.0
     show_timer = True
+    PAD = {}                 # controller button -> the keyboard key it stands for
+    pad_hint = ''
 
     def __init__(self, on_done, on_close, time_bonus=0.0, title=None):
         super().__init__(parent=camera.ui, z=-2)
@@ -32,7 +95,12 @@ class Mini(Entity):
         Entity(parent=self, model='quad', color=color.rgba32(10, 14, 26, 255), scale=(3.2, 1.2), z=1)
         Text(title or self.title, parent=self, y=.44, origin=(0, 0), scale=2, color=color.gold)
         Text(self.instructions, parent=self, y=.37, origin=(0, 0), scale=1, color=color.light_gray)
-        Text('ESC to quit (no pay)', parent=self, y=-.46, origin=(0, 0), scale=.8, color=color.gray)
+        Text('ESC / Start to quit (no pay)' if pad.connected() else 'ESC to quit (no pay)', parent=self, y=-.47,
+             origin=(0, 0), scale=.8, color=color.gray)
+        if pad.connected() and self.pad_hint:
+            Text(self.pad_hint, parent=self, y=-.42, origin=(0, 0), scale=.85, color=color.light_gray)
+        self.nav = pad.Nav()
+        self.kb = None
         self.timer_text = Text('', parent=self, x=.55, y=.44, origin=(0, 0), scale=1.6)
         self.score_text = Text('', parent=self, x=-.55, y=.44, origin=(0, 0), scale=1.6)
         self.setup()
@@ -40,6 +108,8 @@ class Mini(Entity):
     # -- hooks for subclasses ------------------------------------------------
     def setup(self): pass
     def on_key(self, key): pass
+    def on_nav(self, d): pass
+    def on_pad(self, key): pass
     def step(self): pass
     def factor(self): return 0.0
 
@@ -50,6 +120,9 @@ class Mini(Entity):
         self.step()
         if self.done:
             return
+        d = self.nav.poll(time.dt)
+        if d:
+            self.on_nav(d)
         self.time_left -= time.dt
         if self.show_timer:
             self.timer_text.text = f'{max(0, self.time_left):4.1f}s'
@@ -58,6 +131,9 @@ class Mini(Entity):
 
     def input(self, key):
         if key.endswith(' up') or pytime.monotonic() - self.born < .2:
+            return
+        if key.startswith('gamepad'):
+            self.on_pad_button(key)
             return
         if self.done:
             if key in ('enter', 'space', 'left mouse down'):
@@ -68,6 +144,22 @@ class Mini(Entity):
             return
         self.on_key(key)
 
+    def on_pad_button(self, key):
+        if self.done:
+            if key in RESULT_BUTTONS:
+                self.close()
+            return
+        if key in ('gamepad start', 'gamepad back'):
+            self.close()
+            return
+        mapped = self.PAD.get(key)
+        if mapped:
+            self.on_key(mapped)
+        elif key in pad.DPAD:
+            self.on_nav(pad.DPAD[key])
+        else:
+            self.on_pad(key)
+
     def finish(self):
         if self.done:
             return
@@ -75,7 +167,7 @@ class Mini(Entity):
         lines = self.on_done(max(0.0, self.factor())) or []
         Entity(parent=self, model='quad', color=color.rgba32(10, 14, 26, 255), scale=(3.2, 1.2), z=-.5)
         Text('\n'.join(lines), parent=self, z=-1, origin=(0, 0), y=.05, scale=2, color=color.white)
-        Text('Press ENTER to continue', parent=self, z=-1, origin=(0, 0), y=-.3, scale=1.2, color=color.gray)
+        Text('Press ENTER or A to continue' if pad.connected() else 'Press ENTER to continue', parent=self, z=-1, origin=(0, 0), y=-.3, scale=1.2, color=color.gray)
 
     def close(self):
         destroy(self)
@@ -87,6 +179,8 @@ class TypingMini(Mini):
     instructions = 'Type each word exactly. Wrong letters are ignored.'
     duration = 30.0
     TARGET = 9
+    PAD_TARGET = 6          # fewer words needed when typing with the on-screen keys
+    pad_hint = 'Controller: D-pad or left stick to pick a letter, A to press it (the next letter is shaded green)'
     WORDS = ['invoice', 'ledger', 'profit', 'budget', 'revenue', 'margin', 'balance', 'payroll',
              'shipment', 'contract', 'forecast', 'quarterly', 'dividend', 'treasury', 'merger',
              'auditor', 'capital', 'asset', 'income', 'equity', 'receipt', 'invest', 'stocks']
@@ -95,7 +189,11 @@ class TypingMini(Mini):
         self.count = 0
         self.typed = ''
         self.word = ''
-        self.word_text = Text('', parent=self, y=.08, origin=(0, 0), scale=5)
+        self.word_text = Text('', parent=self, y=.1, origin=(0, 0), scale=5)
+        self.target = self.PAD_TARGET if pad.using_pad() else self.TARGET
+        if pad.connected():
+            self.kb = PadKeys(self, [list('qwertyuiop'), list('asdfghjkl'), list('zxcvbnm')], y=-.12, size=.085)
+            self.kb.enabled = pad.using_pad()
         self.next_word()
 
     def next_word(self):
@@ -107,6 +205,18 @@ class TypingMini(Mini):
         rest = self.word[len(self.typed):]
         self.word_text.text = f'<lime>{self.typed}<white>{rest}'
         self.score_text.text = f'Words: {self.count}'
+        if self.kb and rest:
+            self.kb.mark(rest[0])
+
+    def on_nav(self, d):
+        if self.kb:
+            self.kb.enabled = True
+            self.kb.move(d)
+
+    def on_pad(self, key):
+        if self.kb and key == 'gamepad a':
+            self.kb.enabled = True
+            self.on_key(self.kb.token())
 
     def on_key(self, key):
         if len(key) == 1 and key.isalpha() and key.lower() == self.word[len(self.typed)]:
@@ -118,7 +228,7 @@ class TypingMini(Mini):
                 self.refresh()
 
     def factor(self):
-        return min(2.5, self.count / self.TARGET)
+        return min(2.5, self.count / self.target)
 
 
 class SortMini(Mini):
@@ -126,6 +236,9 @@ class SortMini(Mini):
     instructions = 'Press 1 / 2 / 3 (or click) to send the package to the matching bin.'
     duration = 25.0
     TARGET = 16
+    PAD = {'gamepad b': '1', 'gamepad a': '2', 'gamepad x': '3', 'gamepad dpad left': '1',
+           'gamepad dpad down': '2', 'gamepad dpad right': '3'}
+    pad_hint = 'Controller: B = red bin, A = green bin, X = blue bin (or D-pad left / down / right)'
     BINS = [('Red', color.red), ('Green', color.lime), ('Blue', color.azure)]
 
     def setup(self):
@@ -173,6 +286,8 @@ class ReactionMini(Mini):
     duration = 90.0
     show_timer = False
     ROUNDS = 5
+    PAD = {'gamepad a': 'space', 'gamepad b': 'space', 'gamepad x': 'space', 'gamepad y': 'space'}
+    pad_hint = 'Controller: press A (or any face button) when the light turns green'
 
     def setup(self):
         self.clock = 0.0
@@ -230,6 +345,8 @@ class MemoryMini(Mini):
     instructions = 'Watch the pattern, then repeat it with keys 1-4 (or click the pads).'
     duration = 60.0
     TARGET = 5
+    PAD = {'gamepad b': '1', 'gamepad a': '2', 'gamepad x': '3', 'gamepad y': '4'}
+    pad_hint = 'Controller: B = red, A = green, X = blue, Y = yellow'
     PADS = [color.red, color.lime, color.azure, color.yellow]
 
     def setup(self):
@@ -309,11 +426,16 @@ class MathMini(Mini):
     instructions = 'Type the answer and press ENTER.'
     duration = 30.0
     TARGET = 8
+    pad_hint = 'Controller: D-pad or left stick to move on the keypad, A press, X delete, Y submit'
 
     def setup(self):
         self.count = 0
         self.wrong = 0
         self.entry = ''
+        if pad.connected():
+            self.kb = PadKeys(self, [['7', '8', '9'], ['4', '5', '6'], ['1', '2', '3'], ['Del', '0', 'OK']],
+                              x=.5, y=.18, size=.09)
+            self.kb.enabled = pad.using_pad()
         self.q_text = Text('', parent=self, y=.12, origin=(0, 0), scale=5)
         self.a_text = Text('', parent=self, y=-.1, origin=(0, 0), scale=4, color=color.lime)
         self.new_question()
@@ -331,6 +453,23 @@ class MathMini(Mini):
         self.entry = ''
         self.a_text.text = '_'
         self.score_text.text = f'Solved: {self.count}'
+
+    def on_nav(self, d):
+        if self.kb:
+            self.kb.enabled = True
+            self.kb.move(d)
+
+    def on_pad(self, key):
+        if not self.kb:
+            return
+        self.kb.enabled = True
+        if key == 'gamepad a':
+            tok = self.kb.token()
+            self.on_key({'Del': 'backspace', 'OK': 'enter'}.get(tok, tok))
+        elif key == 'gamepad x':
+            self.on_key('backspace')
+        elif key == 'gamepad y':
+            self.on_key('enter')
 
     def on_key(self, key):
         d = digit_of(key)

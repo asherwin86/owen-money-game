@@ -5,6 +5,7 @@ import random
 from ursina import Entity, Text, Vec2, Vec3, camera, color, held_keys, scene, window
 
 import citymap as cm
+import controls as pad
 import citybuild
 import gps
 import minimap as mm
@@ -108,7 +109,7 @@ class DriveSession:
         self.h_offer = Text('', parent=ui, position=(0, .235), origin=(0, 0), scale=1.3, color=color.yellow)
         self.h_prompt = Text('', parent=ui, position=(0, -.32), origin=(0, 0), scale=1.5, color=color.yellow)
         self.h_banner = Text('', parent=ui, position=(0, .12), origin=(0, 0), scale=3, color=color.lime)
-        self.h_help = Text('WASD drive   SPACE handbrake   M map   G destination   R reset car   ESC menu', parent=ui,
+        self.h_help = Text(pad.hint('drive'), parent=ui,
                            position=window.bottom_left + Vec2(.02, .025), origin=(-.5, -.5), scale=.75, color=color.light_gray)
         def backing(x, y, w, h):
             return Entity(parent=ui, model='quad', color=color.rgba32(8, 12, 24, 150), position=(x, y), scale=(w, h), z=1)
@@ -340,8 +341,12 @@ class DriveSession:
             return
         throttle = (held_keys['w'] or held_keys['up arrow']) - (held_keys['s'] or held_keys['down arrow'])
         steer = (held_keys['d'] or held_keys['right arrow']) - (held_keys['a'] or held_keys['left arrow'])
+        throttle = max(-1.0, min(1.0, throttle + pad.trigger('right') - pad.trigger('left')))
+        steer = max(-1.0, min(1.0, steer + pad.axis('left stick x')
+                              + held_keys['gamepad dpad right'] - held_keys['gamepad dpad left']))
+        handbrake = bool(held_keys['space'] or pad.held('left shoulder'))
         c = self.car
-        c.step(dt, throttle, steer, bool(held_keys['space']), self.city, self.traffic.cars)
+        c.step(dt, throttle, steer, handbrake, self.city, self.traffic.cars)
         self.traffic.update(dt, c)
         self._follow_camera(dt)
 
@@ -375,6 +380,10 @@ class DriveSession:
     def _refresh_hud(self, dt):
         c = self.car
         S = self.S
+        hint = pad.hint('drive')
+        if hint != getattr(self, '_hint', None):
+            self._hint = hint
+            self.h_help.text = hint
         self.h_speed.text = f'{int(abs(c.speed) * 3.6)} km/h'
         self.h_street.text = f'{cm.road_name_at(c.x, c.z)}   (near {cm.cross_street_at(c.x, c.z)})'
         ins = self.nav.instruction()
@@ -400,13 +409,14 @@ class DriveSession:
             o = self.offer
             self.h_offer.text = (f'NEW ORDER   {o.restaurant["name"]}  ->  {o.clot.address}\n'
                                  f'about {gd.fmt(o.fare * 1.5)}   {int(o.dist)} m   '
-                                 f'[Y] accept    [N] skip    ({int(OFFER_SECONDS - o.age)}s)')
+                                 f'[{"X" if pad.using_pad() else "Y"}] accept    [{"B" if pad.using_pad() else "N"}] skip    ({int(OFFER_SECONDS - o.age)}s)')
         else:
             self.h_offer.text = ''
         self.bk_offer.enabled = self.offer is not None
         dep = self.city.depot
         near_depot = (math.hypot(dep.curb_pt[0] - c.x, dep.curb_pt[1] - c.z) < 16 and abs(c.speed) < 6)
-        self.h_prompt.text = '[E] End shift and return to town' if near_depot else ''
+        key_name = 'A' if pad.using_pad() else 'E'
+        self.h_prompt.text = f'[{key_name}] End shift and return to town' if near_depot else ''
         if self.banner_t > 0:
             self.banner_t -= dt
             if self.banner_t <= 0:

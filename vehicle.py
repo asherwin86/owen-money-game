@@ -93,7 +93,7 @@ class PlayerCar(Car):
         road = cm.on_road(self.x, self.z)
         cap = top if road else top * .45
         if throttle > 0:
-            v += (28 * dt) if v < 0 else self.acc * max(0.05, 1 - v / top) * dt
+            v += (28 * dt) if v < 0 else self.acc * max(0.05, 1 - v / top) * dt * min(1.0, throttle)
         elif throttle < 0:
             v -= (26 * dt) if v > .3 else self.acc * .55 * dt
         else:

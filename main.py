@@ -10,6 +10,7 @@ import random
 from ursina import *
 from ursina.prefabs.first_person_controller import FirstPersonController
 
+import controls as pad
 import delivery as dv
 import game_data as gd
 import minigames as mg
@@ -33,6 +34,7 @@ for _w in ('entity_counter', 'collider_counter', 'cog_button'):
     if hasattr(window, _w):
         getattr(window, _w).enabled = False
 Sky()
+pad.setup(app)
 
 OFFICE_X = 1000
 OWN_X = 2000
@@ -107,10 +109,12 @@ class Panel(Entity):
     def __init__(self, title, build, width=1.35):
         super().__init__(parent=camera.ui, z=-1)
         self.build, self.width, self.dyn, self.dead = build, width, [], False
+        self.btns, self.focus, self.nav = [], 0, pad.Nav()
+        self.focus_on = pad.using_pad()          # show the controller highlight once a pad is in use
         Entity(parent=self, model='quad', color=rgb(12, 16, 30, 248), scale=(width, .92), z=.2)
         Entity(parent=self, model='quad', color=color.gold, scale=(width, .004), y=.37, z=.1)
         Text(title, parent=self, y=.42, origin=(0, 0), scale=2, color=color.gold)
-        Text('E / ESC to close', parent=self, y=-.43, origin=(0, 0), scale=.8, color=color.gray)
+        self.hint = Text(pad.hint('panel'), parent=self, y=-.43, origin=(0, 0), scale=.8, color=color.gray)
         self.refresh()
 
     def refresh(self):
@@ -118,7 +122,8 @@ class Panel(Entity):
             return
         for e in self.dyn:
             destroy(e)
-        self.dyn = []
+        self.dyn, self.btns = [], []
+        self.hint.text = pad.hint('panel')
         y, left = .31, -self.width / 2 + .04
         for row in self.build():
             kind = row[0]
@@ -136,13 +141,49 @@ class Panel(Entity):
                 _, text, enabled, fn = row
                 self.add_button(text, enabled, fn, 0, y, (.6, .05))
             y -= .062
+        if self.btns:
+            self.focus = max(0, min(self.focus, len(self.btns) - 1))
+            if self.focus_on:
+                fb = self.btns[self.focus]
+                self.dyn.append(Entity(parent=self, model='quad', color=color.gold, position=(fb.x, fb.y),
+                                       scale=(fb.scale_x + .014, fb.scale_y + .014), z=.05))
+                fb.color = color.azure
 
     def add_button(self, text, enabled, fn, x, y, scl):
         b = Button(parent=self, text=text, x=x, y=y, scale=scl,
                    color=color.azure.tint(-.2) if enabled else color.dark_gray)
         if enabled:
             b.on_click = lambda: (fn(), invoke(self.refresh, delay=.02))
+            self.btns.append(b)
         self.dyn.append(b)
+
+    # -- controller ------------------------------------------------------------
+    def move_focus(self, d):
+        if d in ('up', 'down') and self.btns:
+            self.focus_on = True
+            self.focus = (self.focus + (1 if d == 'down' else -1)) % len(self.btns)
+            self.refresh()
+
+    def update(self):
+        if not self.dead:
+            d = self.nav.poll(time.dt)
+            if d:
+                self.move_focus(d)
+
+    def input(self, key):
+        if self.dead:
+            return None
+        if key in pad.DPAD:
+            self.move_focus(pad.DPAD[key])
+            return True
+        if key == 'gamepad a' and self.btns:
+            if not self.focus_on:                  # first press just shows the highlight
+                self.focus_on = True
+                self.refresh()
+            else:
+                self.btns[self.focus].on_click()
+            return True
+        return None
 
 
 panel = None
@@ -773,7 +814,38 @@ refresh_staff()
 station('town', 0, -54, lambda: '[E] Enter your company' if S['own'] else '[E] Claim the lot', lot_action,
         radius=5)
 
-player = FirstPersonController(position=(0, 2, -10), speed=gd.walk_speed(S), jump_height=1.6)
+class PadPlayer(FirstPersonController):
+    """First-person walker that also takes the left stick (move), right stick (look) and A (jump)."""
+
+    def input(self, key):
+        if key == 'gamepad a':
+            self.jump()
+        else:
+            super().input(key)
+
+    def update(self):
+        sx, sy = pad.axis('left stick x'), pad.axis('left stick y')
+        mag = min(1.0, math.hypot(sx, sy))
+        saved = {k: held_keys[k] for k in 'wasd'}
+        base = self.speed
+        if mag:
+            held_keys['w'] = saved['w'] or max(0.0, sy)
+            held_keys['s'] = saved['s'] or max(0.0, -sy)
+            held_keys['d'] = saved['d'] or max(0.0, sx)
+            held_keys['a'] = saved['a'] or max(0.0, -sx)
+            if not any(saved.values()):
+                self.speed = base * max(.35, mag)
+        super().update()
+        self.speed = base
+        for k, v in saved.items():
+            held_keys[k] = v
+        rx, ry = pad.axis('right stick x'), pad.axis('right stick y')
+        if rx or ry:
+            self.rotation_y += rx * time.dt * 150
+            self.camera_pivot.rotation_x = clamp(self.camera_pivot.rotation_x - ry * time.dt * 110, -90, 90)
+
+
+player = PadPlayer(position=(0, 2, -10), speed=gd.walk_speed(S), jump_height=1.6)
 player.cursor.scale = .004
 drive = dv.DriveSession(app, S, roots['city'], notify, earn, open_panel, close_panel, leave_city)
 
@@ -786,6 +858,7 @@ class Game(Entity):
         self.clock = 0.0
         self.frac_paid = 0.0
         self.upd_seen = None
+        self.hint_shown = None
 
     def nearest(self):
         best, bd = None, 1e9
@@ -857,6 +930,10 @@ class Game(Entity):
         for w in (hud, toast_text, prompt, update_text):
             w.enabled = not overlay
         help_text.enabled = not overlay and not drive.active
+        hint = pad.hint('world')
+        if hint != self.hint_shown:
+            self.hint_shown = hint
+            help_text.text = hint
         # hud
         self.t_hud -= dt
         if self.t_hud <= 0:
@@ -882,9 +959,10 @@ class Game(Entity):
         if mini:
             return
         if panel:
-            if key in ('escape', 'e'):
+            if key in ('escape', 'e') or pad.translate('panel', key) == 'escape':
                 close_panel()
             return
+        key = pad.translate('drive' if drive.active else 'world', key)
         if key == 'escape':
             open_panel('Paused', pause_rows, width=.9)
         elif drive.active:

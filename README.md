@@ -33,6 +33,23 @@ A new always-available job in the Gig Plaza. Start a shift and drive a company c
 
 ## Controls
 
+Everything can be played with a keyboard and mouse **or a game controller** (Xbox-style pads and most others that Windows recognises; plug it in before or during the game).
+
+| Action | Keyboard | Controller |
+| --- | --- | --- |
+| Walk / look | WASD, mouse | Left stick / right stick |
+| Jump | Space | A |
+| Interact | E | X |
+| Menus | mouse | D-pad or left stick to choose, A select, B close |
+| Pause menu | Esc | Start |
+| Sorting, memory, reaction mini-games | 1-4 / Space | B, A, X, Y (they match the colours) |
+| Typing and maths mini-games | type | on-screen keys: D-pad / stick to move, A to press |
+| Drive | WASD, Space handbrake | Left stick steer, RT gas, LT brake/reverse, LB handbrake |
+| Accept / skip order | Y / N | X / B |
+| GPS destination, map, reset car | G, M, R | Y, Back, RB |
+
+Keyboard controls:
+
 - **WASD** move, **Space** jump, **E** interact
 - While driving: **WASD** or arrows drive, **Space** handbrake, **R** reset car onto the road
 - **Esc** opens the pause menu (resume or save and quit); it also closes windows and leaves mini-games
