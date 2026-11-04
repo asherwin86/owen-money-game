@@ -154,7 +154,7 @@ footer a { color: var(--muted); }
           </a>
           <a class="btn ghost" href="https://github.com/asherwin86/owen-money-game">Source code</a>
         </div>
-        <p class="meta"><b>Free</b> &middot; Windows 10 / 11 &middot; v1.0.0 &middot; 58 MB &middot; No install, just double-click</p>
+        <p class="meta"><b>Free</b> &middot; Windows 10 / 11 &middot; <span data-version>v1.3.0</span> &middot; <span data-size>58 MB</span> &middot; No install, just double-click</p>
       </div>
       <div class="shot">
         <img src="img/plaza.jpg" width="1280" height="720" alt="The Gig Plaza in Money Tycoon 3D: colorful job kiosks in front of the Apex Corp tower">
@@ -198,7 +198,7 @@ footer a { color: var(--muted); }
   <section id="screens" style="padding-top:0">
     <div class="wrap">
       <h2>Screenshots</h2>
-      <p class="sub">Real in-game footage from version 1.0.0.</p>
+      <p class="sub">Real in-game screenshots.</p>
       <div class="gallery">
         <figure><img loading="lazy" src="img/delivery.jpg" width="1280" height="720" alt="Driving across the Harbor freeway above the river with turn-by-turn GPS directions and a minimap"><figcaption><b>Freeway driving</b> with GPS navigation</figcaption></figure>
         <figure><img loading="lazy" src="img/bridge.jpg" width="1280" height="720" alt="Driving over Harbor Bridge on the freeway with the river alongside"><figcaption><b>Cross bridges</b> and freeways to reach the house</figcaption></figure>
@@ -250,7 +250,7 @@ footer a { color: var(--muted); }
       <h2>Ready to get rich?</h2>
       <p class="sub" style="margin-inline:auto">Your first gig is a few seconds away.</p>
       <a class="btn" href="https://github.com/asherwin86/owen-money-game/releases/latest/download/MoneyTycoon3D.exe">Download for Windows</a>
-      <p class="meta">Free &middot; v1.0.0 &middot; 58 MB</p>
+      <p class="meta">Free &middot; <span data-version>v1.3.0</span> &middot; <span data-size>58 MB</span></p>
     </div>
   </section>
 </main>
@@ -264,5 +264,22 @@ footer a { color: var(--muted); }
   </div>
 </footer>
 
+
+<script>
+/* Show the real latest version and file size from GitHub; the text in the page is the fallback. */
+(function () {
+  try {
+    fetch('https://api.github.com/repos/asherwin86/owen-money-game/releases/latest', { headers: { Accept: 'application/vnd.github+json' } })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (!d || !d.tag_name) return;
+        var asset = (d.assets || []).filter(function (a) { return a.name === 'MoneyTycoon3D.exe'; })[0];
+        document.querySelectorAll('[data-version]').forEach(function (el) { el.textContent = d.tag_name; });
+        if (asset) document.querySelectorAll('[data-size]').forEach(function (el) { el.textContent = Math.round(asset.size / 1048576) + ' MB'; });
+      })
+      .catch(function () {});
+  } catch (e) {}
+})();
+</script>
 </body>
 </html>
