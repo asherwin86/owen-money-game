@@ -1,108 +1,53 @@
-"""GPS: shortest-route planning over the street grid, turn-by-turn directions, and the minimap.
+"""GPS: fastest-route planning over the road graph, turn-by-turn directions and a route follower.
 
-Routing is pure logic (no graphics) so it can be tested headless; the Minimap class needs a window.
+Costs are travel times (length / speed limit) plus small penalties for turns, so routes use freeways and
+highways when they save time. Pure logic (no graphics) so it can be tested without a window.
 """
 import heapq
 import math
 
 import citymap as cm
 
-DIRS = [(1, 0), (0, 1), (-1, 0), (0, -1)]       # east, north, west, south
-TURN_COST = 18.0
-UTURN_COST = 120.0
-BEHIND_COST = 150.0                              # starting off against the direction you are facing
-
-
-def node_pos(i, j):
-    return (cm.avenue_x(i), cm.street_z(j))
-
-
-def _clamp(v, lo, hi):
-    return max(lo, min(hi, v))
-
-
-def _ends(pos):
-    """Both road-junction ends of the segment a snapped position lies on.
-    Returns [(node, distance, direction_of_travel_to_reach_it)]."""
-    axis, idx, t = pos
-    if axis == 'ns':
-        j0 = _clamp(int((t - cm.CZ0) // cm.PITCH), 0, cm.NB - 1)
-        return [((idx, j0), t - cm.street_z(j0), 3), ((idx, j0 + 1), cm.street_z(j0 + 1) - t, 1)]
-    i0 = _clamp(int((t - cm.CX0) // cm.PITCH), 0, cm.NB - 1)
-    return [((i0, idx), t - cm.avenue_x(i0), 2), ((i0 + 1, idx), cm.avenue_x(i0 + 1) - t, 0)]
-
-
-def _xz(pos):
-    axis, idx, t = pos
-    return (cm.avenue_x(idx), t) if axis == 'ns' else (t, cm.street_z(idx))
-
-
-def _segment_id(pos):
-    axis, idx, t = pos
-    if axis == 'ns':
-        return (axis, idx, _clamp(int((t - cm.CZ0) // cm.PITCH), 0, cm.NB - 1))
-    return (axis, idx, _clamp(int((t - cm.CX0) // cm.PITCH), 0, cm.NB - 1))
-
-
-def _turn_penalty(d_in, d_out):
-    if d_in is None or d_in == d_out:
-        return 0.0
-    return UTURN_COST if (d_in - d_out) % 4 == 2 else TURN_COST
+TURN_COST = 4.0          # seconds
+UTURN_COST = 35.0
+BEHIND_COST = 25.0       # starting off against the way the car is facing
+MAX_SPEED = 50.0
+SAMPLE = 25.0            # metres between route points
 
 
 class Route:
-    def __init__(self, pts):
-        self.pts = pts
+    def __init__(self, pts, steps, time, end_xz):
+        self.pts = pts                      # (x, z, y) every ~25 m
+        self.steps = steps                  # (distance along route, kind, text)
+        self.time = time                    # seconds at the speed limits
+        self.end_xz = end_xz
         self.cum = [0.0]
         for a, b in zip(pts, pts[1:]):
             self.cum.append(self.cum[-1] + math.hypot(b[0] - a[0], b[1] - a[1]))
         self.length = self.cum[-1]
-        self.steps = self._steps()
         self._seg = 0
 
-    @staticmethod
-    def _name(a, b):
-        if abs(b[0] - a[0]) > abs(b[1] - a[1]):
-            return cm.street_name(_clamp(round((a[1] - cm.CZ0) / cm.PITCH), 0, cm.NB))
-        return cm.avenue_name(_clamp(round((a[0] - cm.CX0) / cm.PITCH), 0, cm.NB))
-
-    def _steps(self):
-        """Maneuvers: (distance along route, kind, road name after the maneuver)."""
-        steps = []
-        if len(self.pts) < 2:
-            return [(0.0, 'arrive', '')]
-        steps.append((0.0, 'depart', self._name(self.pts[0], self.pts[1])))
-        for k in range(1, len(self.pts) - 1):
-            a, b, c = self.pts[k - 1], self.pts[k], self.pts[k + 1]
-            d1 = (b[0] - a[0], b[1] - a[1])
-            d2 = (c[0] - b[0], c[1] - b[1])
-            n1, n2 = math.hypot(*d1) or 1, math.hypot(*d2) or 1
-            dot = (d1[0] * d2[0] + d1[1] * d2[1]) / (n1 * n2)
-            cross = (d1[0] * d2[1] - d1[1] * d2[0]) / (n1 * n2)
-            if dot > .9:
-                continue
-            kind = 'uturn' if dot < -.9 else ('left' if cross > 0 else 'right')
-            steps.append((self.cum[k], kind, self._name(b, c)))
-        steps.append((self.length, 'arrive', ''))
-        return steps
-
-    def project(self, x, z):
-        """Distance travelled along the route and how far the point is from it."""
-        best, best_s, best_off = None, 0.0, 1e9
+    def project(self, x, z, y):
+        """(distance along the route, how far off it) - 'off' includes a penalty for being on another level."""
         n = len(self.pts) - 1
-        order = list(range(self._seg, n)) + list(range(0, self._seg))
-        for k in order:
-            ax, az = self.pts[k]
-            bx, bz = self.pts[k + 1]
-            dx, dz = bx - ax, bz - az
-            l2 = dx * dx + dz * dz or 1e-9
-            u = _clamp(((x - ax) * dx + (z - az) * dz) / l2, 0.0, 1.0)
-            px, pz = ax + dx * u, az + dz * u
-            off = math.hypot(x - px, z - pz)
-            if off < best_off:
-                best, best_off, best_s = k, off, self.cum[k] + math.sqrt(l2) * u
-        self._seg = best if best is not None else 0
-        return best_s, best_off
+        if n < 1:
+            return 0.0, 0.0
+        best = None
+        for window in ((max(0, self._seg - 12), min(n, self._seg + 40)), (0, n)):
+            best = None
+            for k in range(window[0], window[1]):
+                ax, az, ay = self.pts[k]
+                bx, bz, by = self.pts[k + 1]
+                dx, dz = bx - ax, bz - az
+                l2 = dx * dx + dz * dz or 1e-9
+                u = max(0.0, min(1.0, ((x - ax) * dx + (z - az) * dz) / l2))
+                d = math.hypot(x - (ax + dx * u), z - (az + dz * u)) + 0.9 * abs(ay + (by - ay) * u - y)
+                if best is None or d < best[0]:
+                    best = (d, k, self.cum[k] + math.sqrt(l2) * u)
+            if best[0] < 30:
+                break
+        self._seg = best[1]
+        return best[2], best[0]
 
     def next_step(self, s):
         for st in self.steps:
@@ -114,80 +59,164 @@ class Route:
         return max(0.0, self.length - s)
 
 
-def plan(start_xz, end_xz, heading=None):
-    """Shortest route (with a small penalty per turn) between two world positions, or None."""
-    S = cm.snap(*start_xz)
-    E = cm.snap(*end_xz)
-    sxz, exz = _xz(S), _xz(E)
-    if _segment_id(S) == _segment_id(E):
-        return Route([sxz, exz])
-    starts = _ends(S)
-    ends = {node: (dist, dr) for node, dist, dr in _ends(E)}   # node -> (distance to E, direction from E to node)
+def _turn_angle(tin, tout):
+    return math.atan2(tin[0] * tout[1] - tin[1] * tout[0], tin[0] * tout[0] + tin[1] * tout[1])
 
-    def behind(d):
+
+def _turn_cost(angle):
+    a = abs(angle)
+    if a < 0.6:
+        return 0.0
+    return TURN_COST if a < 2.6 else UTURN_COST
+
+
+def _maneuver(prev, nxt, angle):
+    """(kind, text) for the transition from edge prev to edge nxt, or None if nothing to say."""
+    if nxt.kind == 'ramp' and prev.kind != 'ramp':
+        if prev.kind == 'freeway':
+            return 'exit', f'Take the exit toward {nxt.links[0]}'
+        return 'ramp', f'Take the ramp to {nxt.links[1]}'
+    if prev.kind == 'ramp' and nxt.kind == 'freeway':
+        return 'merge', f'Merge onto {nxt.name}'
+    if nxt.bridge and nxt.bridge != prev.bridge:
+        return 'bridge', f'Cross {nxt.bridge}'
+    a = abs(angle)
+    if a < 0.5:
+        if nxt.name != prev.name and not (prev.bridge and nxt.name == prev.name):
+            return 'straight', f'Continue onto {nxt.name}'
+        return None
+    if a > 2.6:
+        return 'uturn', 'Make a U-turn'
+    side = 'left' if angle > 0 else 'right'
+    return side, f'Turn {side} onto {nxt.name}'
+
+
+def plan(world, start, end, heading=None):
+    """Fastest route from start (x, z, y) to end (x, z) as a Route, or None."""
+    sy = start[2] if len(start) > 2 else cm.ROAD_Y
+    s_hit = world.nearest_edge_point(start[0], start[1], sy, reach=3)
+    d_hit = world.nearest_edge_point(end[0], end[1], cm.ROAD_Y, reach=3)
+    if not s_hit or not d_hit:
+        return None
+    se, st, _ = s_hit
+    de, du, _ = d_hit
+    end_xz = (end[0], end[1])
+
+    if se is de:
+        return _build(world, [(se, st, du)], end_xz)
+
+    def behind(sgn):
         if heading is None:
             return 0.0
-        return BEHIND_COST if (DIRS[d][0] * heading[0] + DIRS[d][1] * heading[1]) < -.3 else 0.0
+        return BEHIND_COST if (se.ux * sgn * heading[0] + se.uz * sgn * heading[1]) < -.3 else 0.0
 
-    heap, dist, prev = [], {}, {}
-    for node, d0, dr in starts:
-        st = (node[0], node[1], dr)
-        c = d0 + behind(dr)
-        if c < dist.get(st, 1e18):
-            dist[st], prev[st] = c, None
-            heapq.heappush(heap, (c, st))
-    best_total, best_state = 1e18, None
+    heap, g, prev = [], {}, {}
+    tx, tz = end_xz
+
+    def h(node):
+        return math.hypot(node.x - tx, node.z - tz) / MAX_SPEED
+
+    for sgn in (1, -1):
+        node = se.b if sgn == 1 else se.a
+        t_to = 1.0 if sgn == 1 else 0.0
+        cost = abs(t_to - st) * se.length / se.speed + behind(sgn)
+        state = (se.id, sgn)
+        g[state] = cost
+        prev[state] = None
+        heapq.heappush(heap, (cost + h(node), cost, state))
+    best_total, best_state, best_final = 1e18, None, None
+    edges = world.edges
     while heap:
-        c, st = heapq.heappop(heap)
-        if c > dist.get(st, 1e18) or c >= best_total:
+        f, cost, state = heapq.heappop(heap)
+        if f >= best_total:
+            break
+        if cost > g.get(state, 1e18):
             continue
-        i, j, d = st
-        if (i, j) in ends:
-            dend, dr_from_e = ends[(i, j)]
-            out_dir = (dr_from_e + 2) % 4                # direction travelled from the node toward E
-            total = c + dend + _turn_penalty(d, out_dir)
-            if total < best_total:
-                best_total, best_state = total, st
-        for d2, (dx, dz) in enumerate(DIRS):
-            ni, nj = i + dx, j + dz
-            if not (0 <= ni <= cm.NB and 0 <= nj <= cm.NB):
+        eid, sgn = state
+        e = edges[eid]
+        node = e.b if sgn == 1 else e.a
+        if node is de.a or node is de.b:
+            if node is de.a:
+                final = du * de.length / de.speed
+                seg = (de, 0.0, du)
+            else:
+                final = (1 - du) * de.length / de.speed
+                seg = (de, 1.0, du)
+            if cost + final < best_total:
+                best_total, best_state, best_final = cost + final, state, seg
+        tin = (e.ux * sgn, e.uz * sgn)
+        for f_edge in node.edges:
+            sgn2 = 1 if f_edge.a is node else -1
+            if f_edge is e and len(node.edges) > 1:
                 continue
-            nst = (ni, nj, d2)
-            nc = c + cm.PITCH + _turn_penalty(d, d2)
-            if nc < dist.get(nst, 1e18):
-                dist[nst], prev[nst] = nc, st
-                heapq.heappush(heap, (nc, nst))
+            tout = (f_edge.ux * sgn2, f_edge.uz * sgn2)
+            nxt_node = f_edge.b if sgn2 == 1 else f_edge.a
+            nc = cost + f_edge.length / f_edge.speed + _turn_cost(_turn_angle(tin, tout))
+            ns = (f_edge.id, sgn2)
+            if nc < g.get(ns, 1e18):
+                g[ns] = nc
+                prev[ns] = state
+                heapq.heappush(heap, (nc + h(nxt_node), nc, ns))
     if best_state is None:
         return None
-    nodes = []
-    st = best_state
-    while st is not None:
-        nodes.append((st[0], st[1]))
-        st = prev[st]
-    nodes.reverse()
-    pts = [sxz] + [node_pos(i, j) for i, j in nodes] + [exz]
-    # drop zero-length / duplicate points
-    clean = [pts[0]]
-    for p in pts[1:]:
-        if math.hypot(p[0] - clean[-1][0], p[1] - clean[-1][1]) > .5:
-            clean.append(p)
-    if len(clean) < 2:
-        clean = [sxz, exz]
-    return Route(clean)
+    chain = []
+    s = best_state
+    while s is not None:
+        chain.append(s)
+        s = prev[s]
+    chain.reverse()
+    segs = []
+    for k, (eid, sgn) in enumerate(chain):
+        e = edges[eid]
+        if k == 0:
+            segs.append((e, st, 1.0 if sgn == 1 else 0.0))
+        else:
+            segs.append((e, 0.0, 1.0) if sgn == 1 else (e, 1.0, 0.0))
+    segs.append(best_final)
+    return _build(world, segs, end_xz)
 
 
-KIND_TEXT = {'left': 'Turn left', 'right': 'Turn right', 'uturn': 'Make a U-turn'}
+def _build(world, segs, end_xz):
+    pts, steps, total_time = [], [], 0.0
+    dist = 0.0
+    prev_dir = None
+    for k, (e, t0, t1) in enumerate(segs):
+        first_pt = len(pts) if k == 0 else len(pts)
+        length = abs(t1 - t0) * e.length
+        total_time += length / e.speed
+        n = max(1, int(math.ceil(length / SAMPLE)))
+        if e.hump is not None:
+            n = max(n, int(math.ceil(length / 12.0)))
+        for i in range(n + 1):
+            if i == 0 and pts and k > 0:
+                continue
+            x, z, y = e.pos(t0 + (t1 - t0) * i / n)
+            pts.append((x, z, y))
+        sgn = 1 if t1 >= t0 else -1
+        tdir = (e.ux * sgn, e.uz * sgn)
+        side = -1 if cm.DRIVE_LEFT else 1
+        lane = e.width / 4
+        ox, oz = tdir[1] * side * lane, -tdir[0] * side * lane       # route runs in the right-hand lane
+        for j in range(first_pt, len(pts)):
+            pts[j] = (pts[j][0] + ox, pts[j][1] + oz, pts[j][2])
+        if k == 0:
+            steps.append((0.0, 'depart', f'Head along {e.name}'))
+        else:
+            pe = segs[k - 1][0]
+            man = _maneuver(pe, e, _turn_angle(prev_dir, tdir))
+            if man:
+                steps.append((dist, man[0], man[1]))
+        dist += length
+        prev_dir = tdir
+    steps.append((dist, 'arrive', 'Arrive at your destination'))
+    # steps carry distances along the sampled polyline, which equals the summed segment lengths
+    return Route(pts, steps, total_time, end_xz)
 
 
 def describe(route, s):
-    """('Turn left onto Oak Ave', metres to it, kind) for the next maneuver."""
-    when, kind, name = route.next_step(s)
-    dist = max(0.0, when - s)
-    if kind == 'arrive':
-        return ('Arrive at your destination', dist, kind)
-    if kind == 'depart':
-        return (f'Head along {name}', dist, kind)
-    return (f'{KIND_TEXT[kind]} onto {name}', dist, kind)
+    """(text, metres to it, kind) for the next maneuver."""
+    when, kind, text = route.next_step(s)
+    return (text, max(0.0, when - s), kind)
 
 
 def fmt_dist(m):
@@ -196,14 +225,21 @@ def fmt_dist(m):
     return f'{int(round(m / 10.0) * 10)} m' if m >= 100 else f'{int(m)} m'
 
 
+def fmt_time(seconds):
+    seconds = int(max(0, seconds))
+    return f'{seconds // 60}:{seconds % 60:02d}'
+
+
 class Navigator:
     """Holds the current destination and keeps a route to it, rerouting when you leave it."""
 
-    def __init__(self):
+    def __init__(self, world):
+        self.world = world
         self.target = None          # (x, z)
         self.label = ''
         self.route = None
         self.s = 0.0
+        self.off = 0.0
         self.version = 0            # increments whenever the route changes (to redraw the line)
         self._cool = 0.0
         self.heading = (0.0, 1.0)
@@ -215,22 +251,22 @@ class Navigator:
         self.target, self.label, self.route = None, '', None
         self.version += 1
 
-    def update(self, dt, x, z, heading):
+    def update(self, dt, x, z, y, heading):
         self._cool = max(0.0, self._cool - dt)
         self.heading = heading
         if self.target is None:
             return
         need = self.route is None
         if self.route is not None:
-            self.s, off = self.route.project(x, z)
-            need = off > 35.0 and self._cool <= 0
+            self.s, self.off = self.route.project(x, z, y)
+            need = self.off > 40.0 and self._cool <= 0
         if need and self._cool <= 0:
-            self.route = plan((x, z), self.target, heading)
+            self.route = plan(self.world, (x, z, y), self.target, heading)
             self.s = 0.0
             self._cool = 1.5
             self.version += 1
             if self.route is not None:
-                self.s, _ = self.route.project(x, z)
+                self.s, self.off = self.route.project(x, z, y)
 
     def instruction(self):
         if self.route is None:
@@ -246,3 +282,8 @@ class Navigator:
 
     def remaining(self):
         return self.route.remaining(self.s) if self.route else 0.0
+
+    def remaining_time(self):
+        if not self.route or self.route.length <= 0:
+            return 0.0
+        return self.route.time * self.remaining() / self.route.length

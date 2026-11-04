@@ -48,6 +48,15 @@ class ControlsTests(unittest.TestCase):
         pad.note_input('w')
         self.assertFalse(pad.using_pad())
 
+    def test_dpad_up_press_is_not_mistaken_for_a_release(self):
+        self.assertFalse(pad.is_release('gamepad dpad up'))            # the press itself ends in ' up'
+        self.assertTrue(pad.is_release('gamepad dpad up up'))          # its release
+        self.assertTrue(pad.is_release('gamepad a up'))
+        self.assertFalse(pad.is_release('gamepad a'))
+        pad.note_input('w')
+        pad.note_input('gamepad dpad up')
+        self.assertTrue(pad.using_pad())
+
     def test_menu_navigation_repeats_while_held(self):
         nav = pad.Nav()
         held_keys['gamepad left stick y'] = -1.0

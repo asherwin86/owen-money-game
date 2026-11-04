@@ -1,17 +1,17 @@
-"""The delivery car (arcade driving) and the AI traffic."""
+"""The delivery car (arcade driving over roads of different heights) and the AI traffic."""
 import math
 import random
 
-from ursina import Entity, Vec3, time
+from ursina import Entity
 
 import citymap as cm
-from citybuild import MeshBuilder, ROAD_Y, LAWN_Y
-from gps import DIRS, node_pos
+import game_data as gd
+from citybuild import MeshBuilder
+from citymap import ROAD_Y
 
-DRIVE_LEFT = False                 # set True for left-hand traffic
-LANE = 3.0                         # lane centre offset from the road centre line
 WHEELBASE = 2.7
 CAR_R = 1.15
+CAR_H = 1.8
 BODY_COLORS = [(214, 60, 52), (60, 110, 200), (240, 240, 236), (40, 44, 50), (240, 190, 50), (70, 160, 100),
                (150, 150, 156), (150, 70, 170), (230, 120, 40)]
 
@@ -35,12 +35,11 @@ def car_mesh(parent, body, sign=None):
         b.quad((sx - .22, .55, -2.11), (sx + .22, .55, -2.11), (sx + .22, .75, -2.11), (sx - .22, .75, -2.11), (220, 40, 40))
     if sign:
         b.box(-.4, 1.58, -.3, .4, 1.95, .3, sign)
-    e = b.to_entity(parent)
-    return e
+    return b.to_entity(parent)
 
 
 class Car(Entity):
-    """Shared by the player's car and AI cars. Position is x/z, heading is rotation_y (0 = north/+z)."""
+    """Shared by the player's car and AI cars. Position is x/z/y, heading is rotation_y (0 = north/+z)."""
 
     def __init__(self, parent, body, sign=None):
         super().__init__(parent=parent)
@@ -53,15 +52,22 @@ class Car(Entity):
         return math.sin(h), math.cos(h)
 
 
-def _hits(x, z, heading_deg, rects):
+def _hits(x, z, heading_deg, walls, y):
+    """True if the car (two circles along its length) overlaps a wall at its height."""
     h = math.radians(heading_deg)
     fx, fz = math.sin(h), math.cos(h)
+    r2 = CAR_R * CAR_R
     for off in (1.2, -1.2):
         cx, cz = x + fx * off, z + fz * off
-        for x0, z0, x1, z1 in rects:
-            px = min(max(cx, x0), x1)
-            pz = min(max(cz, z0), z1)
-            if (cx - px) ** 2 + (cz - pz) ** 2 < CAR_R * CAR_R:
+        for wx, wz, ux, uz, hl, hw, y0, y1 in walls:
+            if y + CAR_H <= y0 or y >= y1 - 0.6:
+                continue
+            rx, rz = cx - wx, cz - wz
+            lx = rx * ux + rz * uz
+            lz = -rx * uz + rz * ux
+            qx = hl if lx > hl else (-hl if lx < -hl else lx)
+            qz = hw if lz > hw else (-hw if lz < -hw else lz)
+            if (lx - qx) ** 2 + (lz - qz) ** 2 < r2:
                 return True
     return False
 
@@ -70,28 +76,36 @@ class PlayerCar(Car):
     def __init__(self, parent, level=0):
         super().__init__(parent, (230, 90, 50), sign=(250, 250, 250))
         self.steer = 0.0
+        self.vy = 0.0
         self.level = level
         self.on_crash = lambda impact, kind: None
         self._crash_cd = 0.0
+        self.safe = None
+        self._safe_t = 0.0
         self.apply_level(level)
 
     def apply_level(self, level):
         self.level = level
-        self.top = 21.0 + 2.6 * level
-        self.acc = 8.5 + 1.4 * level
+        self.top = gd.car_top_speed(level)
+        self.acc = gd.car_acceleration(level)
 
-    def place(self, x, z, heading):
-        self.x, self.z, self.rotation_y = x, z, heading
-        self.y = ROAD_Y
-        self.speed = 0.0
-        self.steer = 0.0
+    def place(self, x, z, heading, y=ROAD_Y):
+        self.x, self.z, self.y, self.rotation_y, self.rotation_x = x, z, y, heading, 0
+        self.speed = self.vy = self.steer = 0.0
+        self.safe = (x, z, heading, y)
 
-    def step(self, dt, throttle, steer_in, handbrake, city, traffic=()):
+    def step(self, dt, throttle, steer_in, handbrake, world, traffic=()):
+        """Advance the car; fast cars are stepped in small pieces so they cannot jump through a thin rail."""
         dt = min(dt, 1 / 20)
+        n = max(1, int(abs(self.speed) * dt / .8) + 1)
+        for _ in range(n):
+            self._step(dt / n, throttle, steer_in, handbrake, world, traffic)
+
+    def _step(self, dt, throttle, steer_in, handbrake, world, traffic=()):
         v = self.speed
         top = self.top
-        road = cm.on_road(self.x, self.z)
-        cap = top if road else top * .45
+        hgt, edge = world.surface(self.x, self.z, self.y)
+        cap = top if edge is not None else top * .45
         if throttle > 0:
             v += (28 * dt) if v < 0 else self.acc * max(0.05, 1 - v / top) * dt * min(1.0, throttle)
         elif throttle < 0:
@@ -103,37 +117,39 @@ class PlayerCar(Car):
         if v > cap:
             v -= min(v - cap, 25 * dt)
         v = clamp(v, -8.0, top * 1.02)
-        self.steer += (steer_in - self.steer) * min(1.0, 7 * dt)
-        lock = 34 - 26 * min(1.0, abs(v) / (top * .9))
+        self.steer += (steer_in - self.steer) * min(1.0, 7 / (1 + abs(v) / 25) * dt)
+        lock = 34 / (1 + (abs(v) / 18) ** 1.6)                    # less steering lock the faster you go
         yaw = v / WHEELBASE * math.tan(math.radians(self.steer * lock))
+        yaw_cap = 32.0 / max(abs(v), 1.0)                         # at most about 3 g sideways
+        yaw = max(-yaw_cap, min(yaw_cap, yaw))
         if handbrake and abs(v) > 6:
             yaw *= 1.5
         h = self.rotation_y + math.degrees(yaw * dt)
         hr = math.radians(h)
         nx, nz = self.x + math.sin(hr) * v * dt, self.z + math.cos(hr) * v * dt
 
-        solids = city.solids_near(nx, nz)
+        walls = world.walls_near(nx, nz)
         self._crash_cd = max(0.0, self._crash_cd - dt)
         crashed = None
-        if _hits(nx, nz, h, solids):
+        if _hits(nx, nz, h, walls, self.y):
             impact = abs(v)
-            if not _hits(nx, self.z, h, solids):
+            if not _hits(nx, self.z, h, walls, self.y):
                 nz, v = self.z, v * .7
-            elif not _hits(self.x, nz, h, solids):
+            elif not _hits(self.x, nz, h, walls, self.y):
                 nx, v = self.x, v * .7
             else:
                 nx, nz, h, v = self.x, self.z, self.rotation_y, -v * .25
-            crashed = ('building', impact)
-        # city edge
+            crashed = ('wall', impact)
         lim = cm.ROAD_W / 2 + 2
         cxl, cxh, czl, czh = cm.CX0 - lim, cm.CX0 + cm.SIZE + lim, cm.CZ0 - lim, cm.CZ0 + cm.SIZE + lim
         if not (cxl <= nx <= cxh and czl <= nz <= czh):
             nx, nz = clamp(nx, cxl, cxh), clamp(nz, czl, czh)
             crashed = crashed or ('edge', abs(v))
             v *= -.2
-        # other cars
         for c in traffic:
             dx, dz = nx - c.x, nz - c.z
+            if abs(dx) > 4 or abs(dz) > 4 or abs(c.y - self.y) > 2.5:
+                continue
             d2 = dx * dx + dz * dz
             if d2 < 3.6 * 3.6:
                 d = math.sqrt(d2) or .01
@@ -147,110 +163,156 @@ class PlayerCar(Car):
             self.on_crash(crashed[1], crashed[0])
         self.speed = v
         self.x, self.z, self.rotation_y = nx, nz, h
-        target_y = ROAD_Y if cm.on_road(nx, nz) else LAWN_Y
-        self.y += (target_y - self.y) * min(1.0, 12 * dt)
+
+        # height: follow the road surface at our level, otherwise fall to the ground
+        hgt, edge = world.surface(nx, nz, self.y)
+        gy = cm.GROUND_Y
+        if edge is not None:
+            self.vy = 0.0
+            self.y += (hgt - self.y) * min(1.0, 14 * dt)
+            self._safe_t -= dt
+            if self._safe_t <= 0 and abs(v) > 2 and abs(hgt - self.y) < .5 and not world.in_water(nx, nz):
+                self.safe = (nx, nz, h, self.y)
+                self._safe_t = .6
+        elif self.y > gy + .15:
+            self.vy -= 28 * dt
+            self.y += self.vy * dt
+            if self.y <= gy:
+                impact = -self.vy
+                self.y, self.vy = gy, 0.0
+                if impact > 8:
+                    self.on_crash(impact, 'fall')
+        else:
+            self.y = gy
+            if world.in_water(nx, nz):
+                self.splash()
+        # tilt with the slope ahead
+        ahead, _ = world.surface(nx + math.sin(hr) * 4, nz + math.cos(hr) * 4, self.y)
+        slope = math.atan2((ahead - self.y) if ahead is not None else 0.0, 4.0)
+        self.rotation_x += (-math.degrees(slope) - self.rotation_x) * min(1.0, 8 * dt)
+
+    def splash(self):
+        """Drove into the river: back to the last safe road point."""
+        self.on_crash(18, 'water')
+        if self.safe:
+            self.place(*self.safe[:3], y=self.safe[3])
 
 
-def _right(d):
-    dx, dz = DIRS[d]
-    s = -1 if DRIVE_LEFT else 1
-    return (dz * s, -dx * s)
+def _right(ux, uz):
+    s = -1 if cm.DRIVE_LEFT else 1
+    return (uz * s, -ux * s)
 
 
 class TrafficCar(Car):
+    """Follows the road graph: a position along an edge, a lane offset and smoothed turns."""
+
     def __init__(self, parent, rng):
         super().__init__(parent, rng.choice(BODY_COLORS))
         self.rng = rng
-        self.cruise = rng.uniform(8.5, 13.0)
-        self.node, self.dir = (0, 0), 0
-        self.wp = []
-        self.steer_deg = 0.0
+        self.edge, self.sgn, self.s = None, 1, 0.0
+        self.nxt = None
+        self.cruise_factor = rng.uniform(.55, .78)
+        self.ox = self.oz = 0.0
 
-    def spawn(self, node, d):
-        self.node, self.dir = node, d
-        nx, nz = node_pos(*node)
-        rx, rz = _right(d)
-        dx, dz = DIRS[d]
-        self.x, self.z = nx - dx * 45 + rx * LANE, nz - dz * 45 + rz * LANE
-        self.y = ROAD_Y
-        self.rotation_y = math.degrees(math.atan2(dx, dz))
-        self.speed = self.cruise * .5
-        self.wp = []
-        self.extend()
+    def spawn(self, edge, sgn, s):
+        self.edge, self.sgn, self.s = edge, sgn, s
+        self.nxt = self._choose_next()
+        self.ox = self.oz = 0.0
+        x, z, y, hd = self._target()
+        self.x, self.z, self.y, self.rotation_y = x, z, y, hd
+        self.rotation_x = 0
+        self.speed = min(self.edge.speed * self.cruise_factor, 8.0)
 
-    def extend(self):
-        while len(self.wp) < 3:
-            i, j = self.node
-            d = self.dir
-            options = []
-            for d2, w in ((d, 6), ((d + 1) % 4, 2), ((d - 1) % 4, 2)):
-                ni, nj = i + DIRS[d2][0], j + DIRS[d2][1]
-                if 0 <= ni <= cm.NB and 0 <= nj <= cm.NB:
-                    options.append((d2, w))
-            d2 = self.rng.choices([o[0] for o in options], [o[1] for o in options])[0]
-            nx, nz = node_pos(i, j)
-            rin, rout = _right(d), _right(d2)
-            self.wp.append((nx - DIRS[d][0] * 14 + rin[0] * LANE, nz - DIRS[d][1] * 14 + rin[1] * LANE))
-            self.wp.append((nx + DIRS[d2][0] * 14 + rout[0] * LANE, nz + DIRS[d2][1] * 14 + rout[1] * LANE))
-            self.node, self.dir = (i + DIRS[d2][0], j + DIRS[d2][1]), d2
+    def _target(self):
+        e, sgn = self.edge, self.sgn
+        t = self.s / e.length if sgn == 1 else 1 - self.s / e.length
+        x, z, y = e.pos(clamp(t, 0.0, 1.0))
+        dx, dz = e.ux * sgn, e.uz * sgn
+        rx, rz = _right(dx, dz)
+        lane = e.width / 4
+        return x + rx * lane, z + rz * lane, y, math.degrees(math.atan2(dx, dz))
+
+    def _choose_next(self):
+        e, sgn = self.edge, self.sgn
+        node = e.b if sgn == 1 else e.a
+        options, weights = [], []
+        for f in node.edges:
+            if f is e and len(node.edges) > 1:
+                continue
+            sgn2 = 1 if f.a is node else -1
+            ang = math.atan2((e.ux * sgn) * (f.uz * sgn2) - (e.uz * sgn) * (f.ux * sgn2),
+                             (e.ux * sgn) * (f.ux * sgn2) + (e.uz * sgn) * (f.uz * sgn2))
+            w = 8.0 if abs(ang) < .6 else (1.5 if abs(ang) < 2.5 else 0.3)
+            options.append((f, sgn2, ang))
+            weights.append(w)
+        pick = self.rng.choices(options, weights)[0]
+        return pick
 
     def drive(self, dt, others):
-        tx, tz = self.wp[0]
-        dx, dz = tx - self.x, tz - self.z
-        dist = math.hypot(dx, dz)
-        if dist < 5 or (dist < 16 and len(self.wp) > 1 and dx * self.fwd[0] + dz * self.fwd[1] < 0):
-            self.wp.pop(0)
-            self.extend()
-            tx, tz = self.wp[0]
-            dx, dz = tx - self.x, tz - self.z
-        want = math.degrees(math.atan2(dx, dz))
-        err = (want - self.rotation_y + 180) % 360 - 180
-        steer = clamp(err * 1.0, -32, 32)
-        self.rotation_y += math.degrees(self.speed / WHEELBASE * math.tan(math.radians(steer)) * dt)
-        target = self.cruise if abs(err) < 25 else 5.0
+        e = self.edge
+        target = e.speed * self.cruise_factor
+        if self.nxt and abs(self.nxt[2]) > .6 and e.length - self.s < 28:
+            target = min(target, 6.0)
         fx, fz = self.fwd
         for o in others:
             if o is self:
                 continue
             rx, rz = o.x - self.x, o.z - self.z
-            if rx > 18 or rx < -18 or rz > 18 or rz < -18:
+            if rx > 22 or rx < -22 or rz > 22 or rz < -22 or abs(o.y - self.y) > 3:
                 continue
             ahead = rx * fx + rz * fz
-            if 0 < ahead < 16 and abs(rx * fz - rz * fx) < 3.0:
-                target = min(target, 0.0 if ahead < 8 else self.cruise * (ahead - 8) / 8)
-        self.speed += clamp(target - self.speed, -14 * dt, 6 * dt)
-        h = math.radians(self.rotation_y)
-        self.x += math.sin(h) * self.speed * dt
-        self.z += math.cos(h) * self.speed * dt
+            if 0 < ahead < 20 and abs(rx * fz - rz * fx) < 3.0:
+                target = min(target, 0.0 if ahead < 8 else self.speed * (ahead - 8) / 12)
+        self.speed += clamp(target - self.speed, -14 * dt, 4 * dt)
+        old = (self.x, self.z)
+        self.s += self.speed * dt
+        if self.s >= e.length:
+            self.s -= e.length
+            f, sgn2, _ = self.nxt
+            self.edge, self.sgn = f, sgn2
+            self.nxt = self._choose_next()
+            if self.s > f.length:
+                self.s = 0.0
+        tx, tz, ty, thd = self._target()
+        # a decaying offset smooths the jump between lanes when changing road
+        if self.ox == 0 and self.oz == 0 and (abs(old[0] - tx) > 2 or abs(old[1] - tz) > 2) and self.s < 3:
+            self.ox, self.oz = old[0] - tx, old[1] - tz
+        k = math.exp(-6 * dt)
+        self.ox *= k
+        self.oz *= k
+        if abs(self.ox) < .02 and abs(self.oz) < .02:
+            self.ox = self.oz = 0.0
+        self.x, self.z, self.y = tx + self.ox, tz + self.oz, ty
+        diff = (thd - self.rotation_y + 180) % 360 - 180
+        self.rotation_y += diff * min(1.0, 7 * dt)
 
 
 class Traffic:
-    def __init__(self, parent, count=40, seed=77):
+    def __init__(self, parent, world, count=40, seed=77):
+        self.world = world
         self.rng = random.Random(seed)
         self.cars = [TrafficCar(parent, self.rng) for _ in range(count)]
-        self._t = 0.0
+        self.fast_edges = [e for e in world.edges if e.kind in ('freeway', 'highway')]
 
     def scatter(self, around):
         for c in self.cars:
-            self._respawn(c, around, 0, 500)
+            self._respawn(c, around, 60, 600)
 
     def _respawn(self, car, around, rmin, rmax):
-        for _ in range(30):
-            i = self.rng.randint(0, cm.NB)
-            j = self.rng.randint(0, cm.NB)
-            nx, nz = node_pos(i, j)
-            if rmin <= math.hypot(nx - around[0], nz - around[1]) <= rmax:
+        edges = self.fast_edges if self.rng.random() < .3 else self.world.edges
+        for _ in range(120):
+            e = self.rng.choice(edges)
+            mx, mz = (e.ax + e.bx) / 2, (e.az + e.bz) / 2
+            if rmin <= math.hypot(mx - around[0], mz - around[1]) <= rmax:
                 break
-        car.spawn((i, j), self.rng.randrange(4))
-        # start it a little way along so it doesn't spawn on top of the player
-        if math.hypot(car.x - around[0], car.z - around[1]) < 40:
-            car.x += DIRS[car.dir][0] * 120
-            car.z += DIRS[car.dir][1] * 120
+        else:
+            e = self.rng.choice(self.world.edges)
+        car.spawn(e, self.rng.choice((1, -1)), self.rng.uniform(0, e.length))
 
     def update(self, dt, player):
         dt = min(dt, 1 / 20)
         others = list(self.cars) + [player]
         for c in self.cars:
-            if (c.x - player.x) ** 2 + (c.z - player.z) ** 2 > 750 ** 2:
-                self._respawn(c, (player.x, player.z), 250, 550)
+            if (c.x - player.x) ** 2 + (c.z - player.z) ** 2 > 900 ** 2:
+                self._respawn(c, (player.x, player.z), 350, 750)
             c.drive(dt, others)

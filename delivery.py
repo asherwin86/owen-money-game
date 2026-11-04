@@ -26,7 +26,7 @@ def lane_heading(lot):
     for sgn in (1, -1):
         dx, dz = road_dx * sgn, road_dz * sgn
         rx, rz = dz, -dx
-        if vh.DRIVE_LEFT:
+        if cm.DRIVE_LEFT:
             rx, rz = -rx, -rz
         if rx * cx + rz * cz > 0:
             return math.degrees(math.atan2(dx, dz))
@@ -34,13 +34,12 @@ def lane_heading(lot):
 
 
 class Order:
-    def __init__(self, restaurant, rlot, clot):
+    def __init__(self, restaurant, rlot, clot, dist, route_time):
         self.restaurant, self.rlot, self.clot = restaurant, rlot, clot
         self.state = 'offer'                      # offer -> pickup -> dropoff
-        dist = (abs(rlot.curb_pt[0] - clot.curb_pt[0]) + abs(rlot.curb_pt[1] - clot.curb_pt[1]))
-        self.dist = dist
+        self.dist = dist                          # length of the fastest route from restaurant to customer
         self.fare = 25 + dist * 0.075
-        self.allowed = dist * 1.15 / 9.0 + 45       # seconds from pickup
+        self.allowed = route_time * 1.5 + 50      # seconds from pickup
         self.elapsed = 0.0
         self.quality = 100.0
         self.age = 0.0
@@ -74,13 +73,16 @@ class DriveSession:
     def build(self):
         if self.built:
             return
-        self.city = cm.City()
-        self.info = citybuild.build_city(self.root, self.city)
+        self.city = cm.World()
+        self.scene = citybuild.CityScene(self.root, self.city)
         self.car = vh.PlayerCar(self.root, gd.car_level(self.S))
         self.car.on_crash = self.on_crash
-        self.traffic = vh.Traffic(self.root, 40)
-        self.nav = gps.Navigator()
+        self.traffic = vh.Traffic(self.root, self.city, 40)
+        self.nav = gps.Navigator(self.city)
         self.minimap = mm.Minimap(self.app, self.root)
+        self.minimap.add_map_layer(self.city)
+        dep = self.city.depot
+        self.scene.prime(dep.curb_pt[0], dep.curb_pt[1], 650)
         for r, lot in self.city.restaurants:
             self.minimap.add_icon(lot.curb_pt[0], lot.curb_pt[1], color.rgb32(*r['color']))
         self.minimap.add_icon(self.city.depot.curb_pt[0], self.city.depot.curb_pt[1], color.rgb32(60, 120, 220), 1.3)
@@ -136,7 +138,7 @@ class DriveSession:
         self._saved_cam = (camera.parent, Vec3(*camera.position), Vec3(*camera.rotation), camera.fov,
                            camera.clip_plane_near)
         camera.parent = scene
-        camera.clip_plane_near = 1.5
+        camera.clip_plane_near = 2.5
         camera.fov = 82
         lot = self.city.depot
         self.car.place(lot.curb_pt[0], lot.curb_pt[1], lane_heading(lot))
@@ -189,7 +191,7 @@ class DriveSession:
         k = 1 - math.exp(-9 * dt)
         camera.position = camera.position + (pos - camera.position) * k
         self._aim(camera.position, look)
-        camera.fov = 82 + min(abs(self.car.speed), 40) * .35
+        camera.fov = 82 + min(abs(self.car.speed), 56) * .3
 
     # ---- crashes -----------------------------------------------------------
     def on_crash(self, impact, kind):
@@ -203,9 +205,19 @@ class DriveSession:
 
     # ---- orders ------------------------------------------------------------
     def _new_offer(self):
+        """A restaurant and a customer far enough apart that the trip needs real navigation."""
         r, rlot = self.rng.choice(self.city.restaurants)
-        clot = self.city.random_house(self.rng, rlot.curb_pt, 350, 1500)
-        order = Order(r, rlot, clot)
+        best = None
+        for _ in range(14):
+            clot = self.city.random_house(self.rng, rlot.curb_pt, 700, 4200)
+            route = gps.plan(self.city, (rlot.curb_pt[0], rlot.curb_pt[1], cm.ROAD_Y), clot.curb_pt)
+            if route and 900 <= route.length <= 7000:
+                best = (clot, route)
+                break
+            if route and best is None:
+                best = (clot, route)
+        clot, route = best
+        order = Order(r, rlot, clot, route.length, route.time)
         order.state = 'offer'
         self.offer = order
 
@@ -232,7 +244,7 @@ class DriveSession:
             self.beacon_label.text = self.manual[1]
             self.beacon_label.position = (self.manual[0][0], 40, self.manual[0][1])
             self.pin_target.color = col
-            self.pin_target.position = (self.manual[0][0], citybuild.ROAD_Y + 4, self.manual[0][1])
+            self.pin_target.position = (self.manual[0][0], 68, self.manual[0][1])
             self.beacon.enabled = self.beacon_label.enabled = self.pin_target.enabled = True
             return
         if not self.orders:
@@ -262,12 +274,12 @@ class DriveSession:
         self.beacon_label.position = (t.curb_pt[0], 40, t.curb_pt[1])
         self.beacon_label.enabled = True
         self.pin_target.color = col
-        self.pin_target.position = (t.curb_pt[0], citybuild.ROAD_Y + 4, t.curb_pt[1])
+        self.pin_target.position = (t.curb_pt[0], 68, t.curb_pt[1])
         self.pin_target.enabled = True
 
     def _arrivals(self):
         c = self.car
-        if abs(c.speed) > ARRIVE_SPEED:
+        if abs(c.speed) > ARRIVE_SPEED or abs(c.y - cm.ROAD_Y) > 3:
             return
         for o in list(self.orders):
             t = o.target
@@ -348,6 +360,7 @@ class DriveSession:
         c = self.car
         c.step(dt, throttle, steer, handbrake, self.city, self.traffic.cars)
         self.traffic.update(dt, c)
+        self.scene.update(c.x, c.z)
         self._follow_camera(dt)
 
         # orders
@@ -372,7 +385,7 @@ class DriveSession:
                 self.route_line.clear()
 
         # navigation
-        self.nav.update(dt, c.x, c.z, c.fwd)
+        self.nav.update(dt, c.x, c.z, c.y, c.fwd)
         self.route_line.update(self.nav.route, self.nav.version, self.nav.s)
         self.minimap.update(c)
         self._refresh_hud(dt)
@@ -385,12 +398,13 @@ class DriveSession:
             self._hint = hint
             self.h_help.text = hint
         self.h_speed.text = f'{int(abs(c.speed) * 3.6)} km/h'
-        self.h_street.text = f'{cm.road_name_at(c.x, c.z)}   (near {cm.cross_street_at(c.x, c.z)})'
+        self.h_street.text = self.city.road_label(c.x, c.z, c.y)
         ins = self.nav.instruction()
         if ins:
             text, dist, kind = ins
             self.h_turn.text = text
-            self.h_turn2.text = f'in {gps.fmt_dist(dist)}     {gps.fmt_dist(self.nav.remaining())} to go  -  {self.nav.label}'
+            self.h_turn2.text = (f'in {gps.fmt_dist(dist)}     {gps.fmt_dist(self.nav.remaining())} to go  '
+                                 f'({gps.fmt_time(self.nav.remaining_time())})  -  {self.nav.label}')
         else:
             self.h_turn.text = ''
             self.h_turn2.text = 'No route. Accept an order or press G to pick a destination.' if not self.orders else ''
@@ -408,7 +422,7 @@ class DriveSession:
         if self.offer:
             o = self.offer
             self.h_offer.text = (f'NEW ORDER   {o.restaurant["name"]}  ->  {o.clot.address}\n'
-                                 f'about {gd.fmt(o.fare * 1.5)}   {int(o.dist)} m   '
+                                 f'about {gd.fmt(o.fare * 1.5)}   {gps.fmt_dist(o.dist)} trip   '
                                  f'[{"X" if pad.using_pad() else "Y"}] accept    [{"B" if pad.using_pad() else "N"}] skip    ({int(OFFER_SECONDS - o.age)}s)')
         else:
             self.h_offer.text = ''
@@ -431,6 +445,7 @@ class DriveSession:
         if key == 'm':
             self.minimap.set_mode('full' if self.minimap.mode == 'mini' else 'mini')
             self._show_hud(self.minimap.mode != 'full')
+            self.route_line.set_full(self.minimap.mode == 'full')
         elif key == 'g':
             self.open_destinations()
         elif key == 'y' and self.offer:
@@ -455,12 +470,15 @@ class DriveSession:
 
     def _reset_car(self):
         c = self.car
-        axis, idx, t = cm.snap(c.x, c.z)
-        x, z = (cm.avenue_x(idx), t) if axis == 'ns' else (t, cm.street_z(idx))
-        h = (0 if math.cos(math.radians(c.rotation_y)) >= 0 else 180) if axis == 'ns' else (90 if math.sin(math.radians(c.rotation_y)) >= 0 else 270)
-        dx, dz = math.sin(math.radians(h)), math.cos(math.radians(h))
-        rx, rz = dz, -dx
-        if vh.DRIVE_LEFT:
-            rx, rz = -rx, -rz
-        c.place(x + rx * vh.LANE, z + rz * vh.LANE, h)
+        hit = self.city.nearest_edge_point(c.x, c.z, c.y, reach=3)
+        if not hit:
+            return
+        e, t, _ = hit
+        fx, fz = c.fwd
+        sgn = 1 if (e.ux * fx + e.uz * fz) >= 0 else -1
+        x, z, y = e.pos(t)
+        dx, dz = e.ux * sgn, e.uz * sgn
+        side = -1 if cm.DRIVE_LEFT else 1
+        lane = e.width / 4
+        c.place(x + dz * side * lane, z - dx * side * lane, math.degrees(math.atan2(dx, dz)), y=y)
         self.notify('Car reset to the road.')

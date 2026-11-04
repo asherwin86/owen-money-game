@@ -2,7 +2,7 @@
 
 A 3D money game made with Python and [Ursina](https://www.ursinaengine.org/).
 
-Earn cash with always-available mini-game gigs, drive a delivery car around a huge city with GPS, take a job at Apex Corp and climb nine ranks to CEO, sell the company, then found and grow a company of your own (and take it public for a permanent bonus).
+Earn cash with always-available mini-game gigs, deliver food across a 6 km open world of freeways, highways and bridges with GPS, take a job at Apex Corp and climb nine ranks to CEO, sell the company, then found and grow a company of your own (and take it public for a permanent bonus).
 
 ## Download (Windows)
 
@@ -23,12 +23,13 @@ On Windows you can also double-click `play.bat`. To build the exe yourself, run 
 
 ## Food Delivery
 
-A new always-available job in the Gig Plaza. Start a shift and drive a company car around a city of over 5,000 houses with named streets and real addresses.
+A new always-available job in the Gig Plaza. Start a shift and drive a company car around a 6 km open world: more than 30,000 houses with named streets and real addresses, cut by a winding **river**, two elevated **freeways**, two **highways** and arterial boulevards.
 
+- You have to get past the obstacles to reach the house. The river can only be crossed on its five bridges. Freeways have walls and can only be entered by **on-ramps** and left by exits, while ordinary streets pass beneath them at underpasses. Highways have median walls with only a few crossings.
 - Orders pop up: press **Y** to accept, **N** to skip. Pick up the food at a restaurant, then deliver it to the customer's address.
-- **GPS** turn-by-turn directions, a glowing route line on the road, a minimap (**M** for the whole-city map) and a destination picker (**G**).
-- Pay depends on distance, speed, tips and **food quality**; crashes shake the food. Your **rating** nudges your pay up or down.
-- Drive carefully around the AI traffic. Upgrade the **delivery car** and the **insulated bag** in the shop (a bigger bag carries more orders at once).
+- **GPS** finds the fastest route and talks you through it ("Take the ramp to Interstate 5", "Cross Harbor Bridge", "Take the exit toward Route 12"), with a route line on the road, a minimap, a whole-world map (**M**) and a destination picker (**G**).
+- Pay depends on distance, speed, tips and **food quality**; crashes shake the food and driving into the river ruins it. Your **rating** nudges your pay up or down.
+- Drive carefully around the AI traffic. Upgrade the **delivery car** in the shop to go from 100 km/h up to **200 km/h**, and the **insulated bag** to carry more orders at once.
 - Park at the Dash Eats Depot and press **E** to end the shift.
 
 ## Controls

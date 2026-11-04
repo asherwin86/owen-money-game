@@ -2,6 +2,7 @@
 plus the glowing route line painted on the road.
 """
 import math
+from array import array
 
 from panda3d.core import BitMask32, Camera, OrthographicLens, Vec4
 from ursina import Entity, Mesh, Text, camera, color, scene, window
@@ -28,21 +29,25 @@ def remaining_points(route, s):
         if not out:
             a, b = route.pts[k], route.pts[k + 1]
             u = max(0.0, (s - route.cum[k]) / ((route.cum[k + 1] - route.cum[k]) or 1))
-            out.append((a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u))
+            out.append((a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u, a[2] + (b[2] - a[2]) * u))
         out.append(route.pts[k + 1])
     return out
 
 
 def ribbon(pts, width, y, col):
+    """Flat strip along (x, z[, y]) points; y is a constant height, or None to follow the points plus 0.14."""
     b = MeshBuilder()
     h = width / 2
-    for (ax, az), (bx, bz) in zip(pts, pts[1:]):
+    for p, q in zip(pts, pts[1:]):
+        ax, az, bx, bz = p[0], p[1], q[0], q[1]
+        ya = (p[2] + .14) if y is None else y
+        yb = (q[2] + .14) if y is None else y
         dx, dz = bx - ax, bz - az
         n = math.hypot(dx, dz) or 1
         px, pz = -dz / n * h, dx / n * h
-        ex, ez = dx / n * h, dz / n * h
-        b.quad((ax - ex + px, y, az - ez + pz), (ax - ex - px, y, az - ez - pz),
-               (bx + ex - px, y, bz + ez - pz), (bx + ex + px, y, bz + ez + pz), col)
+        ex, ez = dx / n * h * .2, dz / n * h * .2
+        b.quad((ax - ex + px, ya, az - ez + pz), (ax - ex - px, ya, az - ez - pz),
+               (bx + ex - px, yb, bz + ez - pz), (bx + ex + px, yb, bz + ez + pz), col)
     return b
 
 
@@ -55,12 +60,20 @@ class RouteLine:
         self.thick = Entity(parent=parent)
         self.thick.double_sided = True
         minimap_only(self.thick)
+        self.fat = Entity(parent=parent, enabled=False)          # wider copy for the whole-world map
+        self.fat.double_sided = True
+        minimap_only(self.fat)
         self._key = None
 
     def clear(self):
         self.world.model = None
         self.thick.model = None
+        self.fat.model = None
         self._key = None
+
+    def set_full(self, full):
+        self.thick.enabled = not full
+        self.fat.enabled = full
 
     def update(self, route, version, s):
         if route is None:
@@ -75,8 +88,9 @@ class RouteLine:
         if len(pts) < 2:
             self.clear()
             return
-        self.world.model = Mesh(vertices=(m := ribbon(pts, 2.0, ROAD_Y + .14, ROUTE_COL)).v, triangles=m.t, colors=m.c)
-        self.thick.model = Mesh(vertices=(m2 := ribbon(pts, 14.0, ROAD_Y + 2.0, ROUTE_COL)).v, triangles=m2.t, colors=m2.c)
+        self.world.model = Mesh(vertices=(m := ribbon(pts, 2.0, None, ROUTE_COL)).v, triangles=m.t, colors=m.c)
+        self.thick.model = Mesh(vertices=(m2 := ribbon(pts, 14.0, 66.0, ROUTE_COL)).v, triangles=m2.t, colors=m2.c)
+        self.fat.model = Mesh(vertices=(m3 := ribbon(pts, 55.0, 66.0, ROUTE_COL)).v, triangles=m3.t, colors=m3.c)
 
 
 class Minimap:
@@ -116,8 +130,40 @@ class Minimap:
         self.icons = []
         self.pins = []
 
+    def add_map_layer(self, world):
+        """A schematic map of the whole world drawn only for the map camera, above everything else."""
+        import citymap as cm
+        b = MeshBuilder()
+        pad = 600
+        b.flat(cm.CX0 - pad, cm.CZ0 - pad, cm.CX0 + cm.SIZE + pad, cm.CZ0 + cm.SIZE + pad, 59.5, (22, 28, 38))
+        for (bi, bj), kind in world.block_kind.items():
+            x0, z0, x1, z1 = cm.block_bounds(bi, bj)
+            col = {'park': (40, 92, 60), 'downtown': (92, 96, 112)}.get(kind, (46, 62, 52))
+            b.flat(x0, z0, x1, z1, 60.0, col)
+        for (ax, az), (bx, bz) in zip(world.river, world.river[1:]):
+            wr = ribbon([(ax, az), (bx, bz)], cm.RIVER_W + 20, 60.5, (60, 120, 200))
+            b.v.extend(wr.v)
+            b.c.extend(wr.c)
+            base = b.n
+            b.t.extend(array('I', (i + base for i in wr.t)))
+            b.n += wr.n
+        order = {'local': 0, 'arterial': 1, 'highway': 2, 'freeway': 3, 'ramp': 4}
+        look = {'local': (10, (150, 156, 168)), 'arterial': (15, (225, 228, 236)),
+                'highway': (22, (255, 210, 80)), 'freeway': (30, (255, 140, 50)), 'ramp': (15, (255, 175, 80))}
+        for e in sorted(world.edges, key=lambda e: order[e.kind]):
+            w, col = look[e.kind]
+            r = ribbon([(e.ax, e.az), (e.bx, e.bz)], w, 61.0 + order[e.kind] * .5, col)
+            base = b.n
+            b.v.extend(r.v)
+            b.c.extend(r.c)
+            b.t.extend(array('I', (i + base for i in r.t)))
+            b.n += r.n
+        layer = b.to_entity(self.arrow.parent)
+        minimap_only(layer)
+        self.layer = layer
+
     def add_icon(self, x, z, col, size=1.0):
-        e = Entity(parent=self.arrow.parent, model='circle', rotation_x=90, position=(x, ROAD_Y + 3, z), color=col)
+        e = Entity(parent=self.arrow.parent, model='circle', rotation_x=90, position=(x, 68, z), color=col)
         e.double_sided = True
         minimap_only(e)
         self.icons.append((e, size))

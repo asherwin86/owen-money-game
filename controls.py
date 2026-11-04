@@ -48,10 +48,15 @@ def hint(context):
     return HINTS[(context, 'pad' if using_pad() else 'keys')]
 
 
+def is_release(key):
+    """True for key-release events. Careful: a D-pad-up *press* is named 'gamepad dpad up', which also ends in ' up'."""
+    return key.endswith(' up') and key != 'gamepad dpad up'
+
+
 def note_input(key):
     """Remember whether the latest input came from a pad or the keyboard."""
     if key.startswith('gamepad'):
-        if not key.endswith(' up'):
+        if not is_release(key):
             _state['last'] = 'pad'
     elif 'mouse' not in key and not key.endswith(' up') and not key.endswith(' hold'):
         _state['last'] = 'keys'

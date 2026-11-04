@@ -130,7 +130,7 @@ class Mini(Entity):
             self.finish()
 
     def input(self, key):
-        if key.endswith(' up') or pytime.monotonic() - self.born < .2:
+        if pad.is_release(key) or pytime.monotonic() - self.born < .2:
             return
         if key.startswith('gamepad'):
             self.on_pad_button(key)

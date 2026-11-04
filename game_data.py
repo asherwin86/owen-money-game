@@ -49,7 +49,7 @@ SHOP = {
     'shoes':  dict(name='Running Shoes',   desc='Walk faster around the city', base=150, growth=1.8, max=5),
     'coffee': dict(name='Coffee Machine',  desc='+3s on every mini-game',      base=250, growth=1.9, max=5),
     'suit':   dict(name='Power Suit',      desc='+10% rank XP',                base=400, growth=1.8, max=10),
-    'car':    dict(name='Better Delivery Car', desc='Faster, quicker to accelerate (food delivery)', base=800, growth=2.0, max=6),
+    'car':    dict(name='Better Delivery Car', desc='Faster and quicker: up to 200 km/h (food delivery)', base=800, growth=2.0, max=6),
     'bag':    dict(name='Insulated Food Bag',  desc='Food stays hot; carry more orders (food delivery)', base=400, growth=1.9, max=4),
 }
 
@@ -154,6 +154,22 @@ def car_level(S):
 
 def bag_level(S):
     return S['shop'].get('bag', 0)
+
+
+MAX_CAR_LEVEL = 6
+TOP_SPEED_BASE = 100 / 3.6                  # m/s (100 km/h) with the starter car
+TOP_SPEED_MAX = 200 / 3.6                  # the best car reaches 200 km/h
+
+
+def car_top_speed(level):
+    """Top speed in m/s: 100 km/h at level 0 up to 200 km/h at the maximum upgrade."""
+    level = max(0, min(MAX_CAR_LEVEL, level))
+    return TOP_SPEED_BASE + (TOP_SPEED_MAX - TOP_SPEED_BASE) * level / MAX_CAR_LEVEL
+
+
+def car_acceleration(level):
+    level = max(0, min(MAX_CAR_LEVEL, level))
+    return 8.5 + 2.4 * level
 
 
 def order_capacity(S):
