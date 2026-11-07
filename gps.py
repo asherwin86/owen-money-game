@@ -81,6 +81,8 @@ def _maneuver(prev, nxt, angle):
     if nxt.bridge and nxt.bridge != prev.bridge:
         return 'bridge', f'Cross {nxt.bridge}'
     a = abs(angle)
+    if a < 1.0 and nxt.name == prev.name:
+        return None                               # just the street curving
     if a < 0.5:
         if nxt.name != prev.name and not (prev.bridge and nxt.name == prev.name):
             return 'straight', f'Continue onto {nxt.name}'
@@ -195,7 +197,7 @@ def _build(world, segs, end_xz):
         sgn = 1 if t1 >= t0 else -1
         tdir = (e.ux * sgn, e.uz * sgn)
         side = -1 if cm.DRIVE_LEFT else 1
-        lane = e.width / 4
+        lane = cm.lane_offset(e)
         ox, oz = tdir[1] * side * lane, -tdir[0] * side * lane       # route runs in the right-hand lane
         for j in range(first_pt, len(pts)):
             pts[j] = (pts[j][0] + ox, pts[j][1] + oz, pts[j][2])

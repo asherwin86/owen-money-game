@@ -140,7 +140,7 @@ class PlayerCar(Car):
             else:
                 nx, nz, h, v = self.x, self.z, self.rotation_y, -v * .25
             crashed = ('wall', impact)
-        lim = cm.ROAD_W / 2 + 2
+        lim = cm.ASPHALT_W / 2 + 2
         cxl, cxh, czl, czh = cm.CX0 - lim, cm.CX0 + cm.SIZE + lim, cm.CZ0 - lim, cm.CZ0 + cm.SIZE + lim
         if not (cxl <= nx <= cxh and czl <= nz <= czh):
             nx, nz = clamp(nx, cxl, cxh), clamp(nz, czl, czh)
@@ -229,7 +229,7 @@ class TrafficCar(Car):
         x, z, y = e.pos(clamp(t, 0.0, 1.0))
         dx, dz = e.ux * sgn, e.uz * sgn
         rx, rz = _right(dx, dz)
-        lane = e.width / 4
+        lane = cm.lane_offset(e)
         return x + rx * lane, z + rz * lane, y, math.degrees(math.atan2(dx, dz))
 
     def _choose_next(self):

@@ -23,9 +23,9 @@ On Windows you can also double-click `play.bat`. To build the exe yourself, run 
 
 ## Food Delivery
 
-A new always-available job in the Gig Plaza. Start a shift and drive a company car around a 6 km open world: more than 30,000 houses with named streets and real addresses, cut by a winding **river**, two elevated **freeways**, two **highways** and arterial boulevards.
+A new always-available job in the Gig Plaza. Start a shift and drive a company car around a 6 km open world: fifteen towns and villages of thousands of houses on winding named streets with real addresses (no grid), linked by curving arterial roads, cut by a winding **river**, two elevated **freeways** and two **highways**.
 
-- You have to get past the obstacles to reach the house. The river can only be crossed on its five bridges. Freeways have walls and can only be entered by **on-ramps** and left by exits, while ordinary streets pass beneath them at underpasses. Highways have median walls with only a few crossings.
+- You have to get past the obstacles to reach the house. The river can only be crossed on its handful of bridges. Freeways have walls and can only be entered by **on-ramps** and left by exits, while ordinary streets pass beneath them at underpasses. Highways have median walls with only a few crossings.
 - Orders pop up: press **Y** to accept, **N** to skip. Pick up the food at a restaurant, then deliver it to the customer's address.
 - **GPS** finds the fastest route and talks you through it ("Take the ramp to Interstate 5", "Cross Harbor Bridge", "Take the exit toward Route 12"), with a route line on the road, a minimap, a whole-world map (**M**) and a destination picker (**G**).
 - Pay depends on distance, speed, tips and **food quality**; crashes shake the food and driving into the river ruins it. Your **rating** nudges your pay up or down.

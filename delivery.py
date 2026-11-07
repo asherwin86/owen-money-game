@@ -19,8 +19,7 @@ ARRIVE_SPEED = 7.0
 
 def lane_heading(lot):
     """Heading (degrees) that puts the lot's curb on the right-hand side of the car."""
-    fx, fz = lot.facing
-    road_dx, road_dz = (1, 0) if abs(fz) > .5 else (0, 1)
+    road_dx, road_dz = lot.tx, lot.tz
     cx = lot.curb_pt[0] - lot.road_pt[0]
     cz = lot.curb_pt[1] - lot.road_pt[1]
     for sgn in (1, -1):
@@ -479,6 +478,6 @@ class DriveSession:
         x, z, y = e.pos(t)
         dx, dz = e.ux * sgn, e.uz * sgn
         side = -1 if cm.DRIVE_LEFT else 1
-        lane = e.width / 4
+        lane = cm.lane_offset(e)
         c.place(x + dz * side * lane, z - dx * side * lane, math.degrees(math.atan2(dx, dz)), y=y)
         self.notify('Car reset to the road.')

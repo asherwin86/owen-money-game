@@ -136,10 +136,22 @@ class Minimap:
         b = MeshBuilder()
         pad = 600
         b.flat(cm.CX0 - pad, cm.CZ0 - pad, cm.CX0 + cm.SIZE + pad, cm.CZ0 + cm.SIZE + pad, 59.5, (22, 28, 38))
-        for (bi, bj), kind in world.block_kind.items():
-            x0, z0, x1, z1 = cm.block_bounds(bi, bj)
-            col = {'park': (40, 92, 60), 'downtown': (92, 96, 112)}.get(kind, (46, 62, 52))
-            b.flat(x0, z0, x1, z1, 60.0, col)
+        for t in world.towns:
+            if not t['ends']:
+                continue
+            tx0, tz0 = t['center']
+            rr = t['r'] * .9
+            ring = [(tx0 + math.cos(a * math.tau / 14) * rr, tz0 + math.sin(a * math.tau / 14) * rr) for a in range(14)]
+            for k in range(14):
+                p, q = ring[k], ring[(k + 1) % 14]
+                b.tri((tx0, 60.0, tz0), (p[0], 60.0, p[1]), (q[0], 60.0, q[1]),
+                      (70, 76, 92) if t['kind'] == 'downtown' else (34, 52, 42))
+        for lot in world.lots:
+            cx, cz, tx, tz, hl, hw = lot.body
+            col = (118, 122, 142) if lot.kind == 'shop' else (92, 112, 98)
+            lx, lz = -tz, tx
+            b.quad((cx - tx * hl - lx * hw, 60.2, cz - tz * hl - lz * hw), (cx + tx * hl - lx * hw, 60.2, cz + tz * hl - lz * hw),
+                   (cx + tx * hl + lx * hw, 60.2, cz + tz * hl + lz * hw), (cx - tx * hl + lx * hw, 60.2, cz - tz * hl + lz * hw), col)
         for (ax, az), (bx, bz) in zip(world.river, world.river[1:]):
             wr = ribbon([(ax, az), (bx, bz)], cm.RIVER_W + 20, 60.5, (60, 120, 200))
             b.v.extend(wr.v)
